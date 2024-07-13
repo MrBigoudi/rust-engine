@@ -1,0 +1,15 @@
+[package]
+name = "rust-engine"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+xcb = "1.4.0"
+
+[[bin]]
+name = "test-bed"
+path = "test_bed/main.rs"
+
+[lib]
+name = "engine"
+path = "engine/lib.rs"
