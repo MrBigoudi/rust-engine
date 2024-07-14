@@ -1,4 +1,4 @@
-use crate::platform::{platform::Platform, platform_linux::PlatformLinux};
+use crate::platforms::{platform::Platform, platform_linux::PlatformLinux};
 
 pub enum LogLevel {
     Error,
