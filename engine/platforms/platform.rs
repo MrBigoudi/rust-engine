@@ -1,26 +1,50 @@
-use crate::core::logger::LogLevel;
+use crate::core::{errors::EngineError, logger::LogLevel};
 
+/// Abstract trait for the platform (os) specific code
 pub trait Platform {
-    fn init(&mut self, window_title: String, x: i16, y: i16, width: u16, height: u16, resizable: bool);
+    /// Initiate the internal structure of the platform
+    fn init(
+        &mut self,
+        window_title: String,
+        x: i16,
+        y: i16,
+        width: u16,
+        height: u16,
+        resizable: bool,
+    ) -> Result<(), EngineError>;
 
-    fn shutdown(&mut self);
+    /// Shutdown the platform
+    fn shutdown(&mut self) -> Result<(), EngineError>;
 
+    /// Loop through all the events until they are all consumed
     /// Return true if should quit
-    fn handle_events(&mut self) -> bool;
+    fn handle_events(&mut self) -> Result<bool, EngineError>;
 
-    fn get_absolute_time_in_seconds(&mut self) -> f64;
+    /// Ellapsed time in seconds since the UNIX_EPOCH
+    /// Panic if an error occurs
+    fn get_absolute_time_in_seconds(&self) -> f64;
 
-    fn sleep_from_milliseconds(&mut self, ms: u64);
+    /// Multithreading compatible sleep
+    fn sleep_from_milliseconds(&self, ms: u64);
 
-    fn console_write(message: &str, _log_level: LogLevel) {
+    /// Defaut output on the console
+    fn console_write(message: &str, _log_level: LogLevel)
+    where
+        Self: Sized,
+    {
         print!("{}", message);
     }
 
-    fn console_write_error(message: &str, _log_level: LogLevel) {
+    /// Defaut output on the console for errors
+    fn console_write_error(message: &str, _log_level: LogLevel)
+    where
+        Self: Sized,
+    {
         eprint!("{}", message);
     }
 }
 
+/// Initiate the engine platform depending on the OS
 pub fn init_platform(
     window_title: String,
     x: i16,
@@ -28,11 +52,14 @@ pub fn init_platform(
     width: u16,
     height: u16,
     resizable: bool,
-) -> Option<impl Platform> {
+) -> Result<impl Platform, EngineError> {
     #[cfg(target_os = "linux")]
     {
         let mut platform_linux = super::platform_linux::PlatformLinux::default();
-        platform_linux.init(window_title, x, y, width, height, resizable);
-        Some(platform_linux)
+        let result = platform_linux.init(window_title, x, y, width, height, resizable);
+        match result {
+            Err(_) => Err(EngineError::InitializationFailed),
+            Ok(_) => Ok(platform_linux),
+        }
     }
 }

@@ -1,14 +1,23 @@
 use crate::platforms::{platform::Platform, platform_linux::PlatformLinux};
 
+use super::errors::EngineError;
+
+/// The log levels for the application
 pub enum LogLevel {
+    /// Fatal errors resulting in a panic
     Error,
+    /// Warning not fatals
     Warning,
+    /// Debug informations
     Debug,
+    /// Other printable information
     Info,
 }
 
 impl LogLevel {
-    pub fn should_panic(&self) -> bool {
+    /// Return true if this level of logging is considered as an error
+    /// true for Error, false for everything else
+    pub fn is_an_error(&self) -> bool {
         match self {
             LogLevel::Error => true,
             LogLevel::Warning => false,
@@ -29,6 +38,7 @@ impl std::fmt::Display for LogLevel {
     }
 }
 
+/// Platform specific printer
 pub fn print_console() -> fn(&str, LogLevel) {
     #[cfg(target_os = "linux")]
     {
@@ -41,6 +51,7 @@ pub fn print_console() -> fn(&str, LogLevel) {
     }
 }
 
+/// Platform specific printer for errors
 pub fn print_console_error() -> fn(&str, LogLevel) {
     #[cfg(target_os = "linux")]
     {
@@ -53,17 +64,19 @@ pub fn print_console_error() -> fn(&str, LogLevel) {
     }
 }
 
+/// Macro for for logging message
+/// This maccro should not be used on its own but through other macros like error!, warn!, debug! and info!
 #[macro_export]
 macro_rules! log {
     ($level:expr) => {
-        if $level.should_panic() {
+        if $level.is_an_error() {
             $crate::core::logger::print_console_error()(&format!("[{}]\n", $level), $level)
         } else {
             $crate::core::logger::print_console()(&format!("[{}]\n", $level), $level)
         }
     };
     ($level:expr, $($arg:tt)*) => {
-        if $level.should_panic() {
+        if $level.is_an_error() {
             $crate::core::logger::print_console_error()(&format!("[{}] {}\n", $level, format!($($arg)*)), $level)
         } else {
             $crate::core::logger::print_console()(&format!("[{}] {}\n", $level, format!($($arg)*)), $level);
@@ -75,11 +88,9 @@ macro_rules! log {
 macro_rules! error {
     () => {
         $crate::log!($crate::core::logger::LogLevel::Error);
-        panic!()
     };
     ($($arg:tt)*) => {{
         $crate::log!($crate::core::logger::LogLevel::Error, $($arg)*);
-        panic!()
     }};
 }
 
@@ -113,11 +124,14 @@ macro_rules! info {
     }};
 }
 
-pub fn init_logger() -> bool {
+/// Initiate the engine logger
+pub fn init_logger() -> Result<(), EngineError> {
     // TODO: implement log file
-    true
+    Ok(())
 }
 
-pub fn shutdown_logger() {
+/// Shutdown the engine logger
+pub fn shutdown_logger() -> Result<(), EngineError> {
     // TODO:
+    Ok(())
 }

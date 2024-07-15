@@ -1,6 +1,10 @@
+/// Linux implementation of the platform trait
 use xcb::Xid;
 
-use crate::{core::logger::LogLevel, error};
+use crate::{
+    core::{errors::EngineError, logger::LogLevel},
+    error,
+};
 
 use super::platform::Platform;
 
@@ -18,7 +22,8 @@ pub struct PlatformLinux {
 impl PlatformLinux {
     pub fn get_color(log_level: LogLevel) -> &'static str {
         match log_level {
-            LogLevel::Error => "0;41",   // Red background
+            // https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html for other ANSI codes
+            LogLevel::Error => "1;31",   // Red foreground
             LogLevel::Warning => "1;33", // Yellow foreground
             LogLevel::Debug => "1;34",   // Blue foreground
             LogLevel::Info => "1;32",    // Green foreground
@@ -27,10 +32,23 @@ impl PlatformLinux {
 }
 
 impl Platform for PlatformLinux {
-    fn init(&mut self, window_title: String, x: i16, y: i16, width: u16, height: u16, resizable: bool) {
+    fn init(
+        &mut self,
+        window_title: String,
+        x: i16,
+        y: i16,
+        width: u16,
+        height: u16,
+        resizable: bool,
+    ) -> Result<(), EngineError> {
         // Connect to the X server.
-        let (connection, screen_number) = xcb::Connection::connect(None)
-            .unwrap_or_else(|err| error!("Failed to connect to the X server: {:?}", err));
+        let (connection, screen_number) = match xcb::Connection::connect(None) {
+            Err(err) => {
+                error!("Failed to connect to the X server: {:?}", err);
+                return Err(EngineError::InitializationFailed);
+            }
+            Ok((connection, screen_number)) => (connection, screen_number),
+        };
 
         self.connection = Some(connection);
 
@@ -77,11 +95,10 @@ impl Platform for PlatformLinux {
 
         // We now check if the window creation worked.
         // A cookie can't be cloned; it is moved to the function.
-        self.connection
-            .as_ref()
-            .unwrap()
-            .check_request(cookie)
-            .unwrap_or_else(|err| error!("Failed to create the window: {:?}", err));
+        if let Err(err) = self.connection.as_ref().unwrap().check_request(cookie) {
+            error!("Failed to create the window: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        };
 
         // Let's change the window title
         let cookie =
@@ -96,11 +113,10 @@ impl Platform for PlatformLinux {
                     data: window_title.as_bytes(),
                 });
         // And check for success again
-        self.connection
-            .as_ref()
-            .unwrap()
-            .check_request(cookie)
-            .unwrap_or_else(|err| error!("Failed to set the window title: {:?}", err));
+        if let Err(err) = self.connection.as_ref().unwrap().check_request(cookie) {
+            error!("Failed to set the window title: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        };
 
         if !resizable {
             // TODO:
@@ -133,18 +149,20 @@ impl Platform for PlatformLinux {
                     }),
             );
             (
-                self.connection
-                    .as_ref()
-                    .unwrap()
-                    .wait_for_reply(cookies.0)
-                    .unwrap()
-                    .atom(),
-                self.connection
-                    .as_ref()
-                    .unwrap()
-                    .wait_for_reply(cookies.1)
-                    .unwrap()
-                    .atom(),
+                match self.connection.as_ref().unwrap().wait_for_reply(cookies.0) {
+                    Err(err) => {
+                        error!("Failed to get the protocols atom: {:?}", err);
+                        return Err(EngineError::InitializationFailed);
+                    }
+                    Ok(reply) => reply.atom(),
+                },
+                match self.connection.as_ref().unwrap().wait_for_reply(cookies.1) {
+                    Err(err) => {
+                        error!("Failed to get the delete window atom: {:?}", err);
+                        return Err(EngineError::InitializationFailed);
+                    }
+                    Ok(reply) => reply.atom(),
+                },
             )
         };
 
@@ -154,60 +172,66 @@ impl Platform for PlatformLinux {
         // We now activate the window close event by sending the following request.
         // If we don't do this we can still close the window by clicking on the "x" button,
         // but the event loop is notified through a connection shutdown error.
-        self.connection
-            .as_ref()
-            .unwrap()
-            .check_request(
-                self.connection
-                    .as_ref()
-                    .unwrap()
-                    .send_request_checked(&xcb::x::ChangeProperty {
-                        mode: xcb::x::PropMode::Replace,
-                        window,
-                        property: *self.window_manager_protocols.as_mut().unwrap(),
-                        r#type: xcb::x::ATOM_ATOM,
-                        data: &[self
-                            .window_manager_delete_window
-                            .as_mut()
-                            .unwrap()
-                            .resource_id()],
-                    }),
-            )
-            .unwrap_or_else(|err| error!("Failed to activate the window close event: {:?}", err));
+        if let Err(err) = self.connection.as_ref().unwrap().check_request(
+            self.connection
+                .as_ref()
+                .unwrap()
+                .send_request_checked(&xcb::x::ChangeProperty {
+                    mode: xcb::x::PropMode::Replace,
+                    window,
+                    property: *self.window_manager_protocols.as_mut().unwrap(),
+                    r#type: xcb::x::ATOM_ATOM,
+                    data: &[self
+                        .window_manager_delete_window
+                        .as_mut()
+                        .unwrap()
+                        .resource_id()],
+                }),
+        ) {
+            error!("Failed to activate the window close event: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        };
 
         self.screen_number = screen_number;
         self.screen = Some(screen.to_owned());
         self.window = Some(window);
+
+        Ok(())
     }
 
-    fn shutdown(&mut self) {
+    fn shutdown(&mut self) -> Result<(), EngineError> {
         // We close the window
         let window = self.window.unwrap();
-        self.connection
-            .as_ref()
-            .unwrap()
-            .check_request(
-                self.connection
-                    .as_ref()
-                    .unwrap()
-                    .send_request_checked(&xcb::x::DestroyWindow { window }),
-            )
-            .unwrap_or_else(|err| error!("Failed to destroy the window: {:?}", err));
-    }
-
-    fn get_absolute_time_in_seconds(&mut self) -> f64 {
-        match std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH) {
-            Ok(duration) => duration.as_secs_f64(),
-            Err(_) => error!("SystemTime before UNIX EPOCH!"),
+        match self.connection.as_ref().unwrap().check_request(
+            self.connection
+                .as_ref()
+                .unwrap()
+                .send_request_checked(&xcb::x::DestroyWindow { window }),
+        ) {
+            Err(err) => {
+                error!("Failed to destroy the window: {:?}", err);
+                Err(EngineError::InitializationFailed)
+            }
+            Ok(()) => Ok(()),
         }
     }
 
-    fn sleep_from_milliseconds(&mut self, ms: u64) {
+    fn get_absolute_time_in_seconds(&self) -> f64 {
+        match std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH) {
+            Ok(duration) => duration.as_secs_f64(),
+            Err(_) => {
+                error!("SystemTime before UNIX EPOCH!");
+                panic!()
+            }
+        }
+    }
+
+    fn sleep_from_milliseconds(&self, ms: u64) {
         let duration_from_milliseconds = std::time::Duration::from_millis(ms);
         std::thread::sleep(duration_from_milliseconds);
     }
 
-    fn handle_events(&mut self) -> bool {
+    fn handle_events(&mut self) -> Result<bool, EngineError> {
         let mut quit_flag = false;
 
         'infinite_loop: loop {
@@ -258,7 +282,7 @@ impl Platform for PlatformLinux {
             }
         }
 
-        quit_flag
+        Ok(quit_flag)
     }
 
     fn console_write(message: &str, log_level: LogLevel) {

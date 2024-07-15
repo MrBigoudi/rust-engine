@@ -1,2 +1,4 @@
 pub mod core;
-pub mod platforms;
+pub mod entry;
+pub mod game;
+pub(crate) mod platforms;
