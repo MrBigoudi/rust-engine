@@ -2,14 +2,26 @@
 use xcb::Xid;
 
 use crate::{
-    core::{errors::EngineError, logger::LogLevel},
-    error,
+    core::{
+        errors::EngineError,
+        systems::{
+            input::{
+                keyboard::{intput_process_key, Key, KeyState},
+                mouse::{
+                    input_process_mouse_button, input_process_mouse_move, MouseButton,
+                    MouseButtonState,
+                },
+            },
+            logger::LogLevel,
+        },
+    },
+    debug, error, warn,
 };
 
 use super::platform::Platform;
 
 #[derive(Default)]
-pub struct PlatformLinux {
+pub(crate) struct PlatformLinux {
     // Internal state
     pub screen_number: i32,
     pub connection: Option<xcb::Connection>,
@@ -17,18 +29,7 @@ pub struct PlatformLinux {
     pub window: Option<xcb::x::Window>,
     pub window_manager_protocols: Option<xcb::x::Atom>,
     pub window_manager_delete_window: Option<xcb::x::Atom>,
-}
-
-impl PlatformLinux {
-    pub fn get_color(log_level: LogLevel) -> &'static str {
-        match log_level {
-            // https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html for other ANSI codes
-            LogLevel::Error => "1;31",   // Red foreground
-            LogLevel::Warning => "1;33", // Yellow foreground
-            LogLevel::Debug => "1;34",   // Blue foreground
-            LogLevel::Info => "1;32",    // Green foreground
-        }
-    }
+    pub key_symbols: Option<*mut xcb_util::ffi::keysyms::xcb_key_symbols_t>,
 }
 
 impl Platform for PlatformLinux {
@@ -41,7 +42,7 @@ impl Platform for PlatformLinux {
         height: u16,
         resizable: bool,
     ) -> Result<(), EngineError> {
-        // Connect to the X server.
+        // Connect to the X server
         let (connection, screen_number) = match xcb::Connection::connect(None) {
             Err(err) => {
                 error!("Failed to connect to the X server: {:?}", err);
@@ -196,10 +197,27 @@ impl Platform for PlatformLinux {
         self.screen = Some(screen.to_owned());
         self.window = Some(window);
 
+        // Init keysym
+        let key_symbols = unsafe {
+            xcb_util::ffi::keysyms::xcb_key_symbols_alloc(
+                self.connection.as_ref().unwrap().get_raw_conn() as *mut _,
+            )
+        };
+
+        if key_symbols.is_null() {
+            error!("Failed to allocate key symbols");
+            return Err(EngineError::InitializationFailed);
+        }
+
+        self.key_symbols = Some(key_symbols);
+
         Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), EngineError> {
+        // close the keysym
+        unsafe { xcb_util::ffi::keysyms::xcb_key_symbols_free(self.key_symbols.unwrap()) };
+
         // We close the window
         let window = self.window.unwrap();
         match self.connection.as_ref().unwrap().check_request(
@@ -246,18 +264,81 @@ impl Platform for PlatformLinux {
                         xcb::Event::X(event) => {
                             match event {
                                 // Keyboard press / release
-                                xcb::x::Event::KeyPress(_) => continue 'infinite_loop, //TODO:,
-                                xcb::x::Event::KeyRelease(_) => continue 'infinite_loop, //TODO:
+                                xcb::x::Event::KeyPress(event) => {
+                                    let key_code = event.detail();
+                                    if let Some(key) = self.translate_keycode(key_code, 0) {
+                                        // debug!("code pressed: {:?}", key);
+                                        intput_process_key(key, KeyState::Pressed)?;
+                                    };
+                                }
+                                xcb::x::Event::KeyRelease(event) => {
+                                    let key_code = event.detail();
+                                    if let Some(key) = self.translate_keycode(key_code, 0) {
+                                        // debug!("code release: {:?}", key);
+                                        intput_process_key(key, KeyState::Released)?;
+                                    };
+                                }
 
                                 // Mouse press / release
-                                xcb::x::Event::ButtonPress(_) => continue 'infinite_loop, //TODO:
-                                xcb::x::Event::ButtonRelease(_) => continue 'infinite_loop, //TODO:
+                                xcb::x::Event::ButtonPress(event) => {
+                                    let button = event.detail() as u32;
+                                    if button == xcb::x::ButtonIndex::N1 as u32 {
+                                        input_process_mouse_button(
+                                            MouseButton::Left,
+                                            MouseButtonState::Pressed,
+                                        )?;
+                                        // debug!("left button pressed");
+                                    } else if button == xcb::x::ButtonIndex::N2 as u32 {
+                                        input_process_mouse_button(
+                                            MouseButton::Middle,
+                                            MouseButtonState::Pressed,
+                                        )?;
+                                        // debug!("middle button pressed");
+                                    } else if button == xcb::x::ButtonIndex::N3 as u32 {
+                                        input_process_mouse_button(
+                                            MouseButton::Right,
+                                            MouseButtonState::Pressed,
+                                        )?;
+                                        // debug!("right button pressed");
+                                    } else {
+                                        warn!("Unknown mouse button: {:?}", button);
+                                    };
+                                }
+                                xcb::x::Event::ButtonRelease(event) => {
+                                    let button = event.detail() as u32;
+                                    if button == xcb::x::ButtonIndex::N1 as u32 {
+                                        input_process_mouse_button(
+                                            MouseButton::Left,
+                                            MouseButtonState::Released,
+                                        )?;
+                                        // debug!("left button released");
+                                    } else if button == xcb::x::ButtonIndex::N2 as u32 {
+                                        input_process_mouse_button(
+                                            MouseButton::Middle,
+                                            MouseButtonState::Released,
+                                        )?;
+                                        // debug!("middle button released");
+                                    } else if button == xcb::x::ButtonIndex::N3 as u32 {
+                                        input_process_mouse_button(
+                                            MouseButton::Right,
+                                            MouseButtonState::Released,
+                                        )?;
+                                        // debug!("right button released");
+                                    } else {
+                                        warn!("Unknown mouse button: {:?}", button);
+                                    };
+                                }
 
                                 // Mouse movement
-                                xcb::x::Event::MotionNotify(_) => continue 'infinite_loop, //TODO:
+                                xcb::x::Event::MotionNotify(event) => {
+                                    // debug!("mouse pos: ({}, {})", event.event_x(), event.event_y());
+                                    input_process_mouse_move(event.event_x(), event.event_y())?;
+                                }
 
                                 // Resizing
-                                xcb::x::Event::ConfigureNotify(_) => continue 'infinite_loop, //TODO:
+                                xcb::x::Event::ConfigureNotify(_) => {
+                                    continue 'infinite_loop; //TODO:
+                                }
 
                                 xcb::x::Event::ClientMessage(client_message_event) => {
                                     // Window closing
@@ -299,5 +380,173 @@ impl Platform for PlatformLinux {
             PlatformLinux::get_color(log_level),
             message
         );
+    }
+}
+
+impl PlatformLinux {
+    pub fn get_color(log_level: LogLevel) -> &'static str {
+        match log_level {
+            // https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html for other ANSI codes
+            LogLevel::Error => "1;31",   // Red foreground
+            LogLevel::Warning => "1;33", // Yellow foreground
+            LogLevel::Debug => "1;34",   // Blue foreground
+            LogLevel::Info => "1;32",    // Green foreground
+        }
+    }
+
+    // Key translation
+    fn translate_keycode(&self, xcb_keycode: u8, col: i32) -> Option<Key> {
+        let keysym: u32 = unsafe {
+            xcb_util::ffi::keysyms::xcb_key_symbols_get_keysym(
+                self.key_symbols.unwrap(),
+                xcb_keycode,
+                col,
+            )
+        };
+
+        match keysym {
+            0xFF08 => Some(Key::BACKSPACE),
+            0xFF0D => Some(Key::ENTER),
+            0xFF09 => Some(Key::TAB),
+            0xFFE1 => Some(Key::LSHIFT),
+            0xFFE2 => Some(Key::RSHIFT),
+            0xFFE3 => Some(Key::LCONTROL),
+            0xFFE4 => Some(Key::RCONTROL),
+            0xFF13 => Some(Key::PAUSE),
+            0xFFE5 => Some(Key::CAPITAL),
+            0xFF1B => Some(Key::ESCAPE),
+            0xFF2C => Some(Key::CONVERT),
+            0xFF2D => Some(Key::NONCONVERT),
+            0xFF2E => Some(Key::ACCEPT),
+            0xFF2F => Some(Key::MODECHANGE),
+            0x0020 => Some(Key::SPACE),
+            0xFF55 => Some(Key::PRIOR),
+            0xFF56 => Some(Key::NEXT),
+            0xFF57 => Some(Key::END),
+            0xFF50 => Some(Key::HOME),
+            0xFF51 => Some(Key::LEFT),
+            0xFF52 => Some(Key::UP),
+            0xFF53 => Some(Key::RIGHT),
+            0xFF54 => Some(Key::DOWN),
+            0xFF60 => Some(Key::SELECT),
+            0xFF61 => Some(Key::PRINT),
+            0xFF62 => Some(Key::EXECUTE),
+            // 0xFF63 => Some(Key::SNAPSHOT), // Not supported
+            0xFF63 => Some(Key::INSERT),
+            0xFFFF => Some(Key::DELETE),
+            0xFF6A => Some(Key::HELP),
+            0xFFEB => Some(Key::LWIN),
+            0xFFEC => Some(Key::RWIN),
+            // 0xFF67 => Some(Key::APPS), // Not supported
+            // 0xFF65 => Some(Key::SLEEP), // Not supported
+            0xFFB0 => Some(Key::NUMPAD0),
+            0xFFB1 => Some(Key::NUMPAD1),
+            0xFFB2 => Some(Key::NUMPAD2),
+            0xFFB3 => Some(Key::NUMPAD3),
+            0xFFB4 => Some(Key::NUMPAD4),
+            0xFFB5 => Some(Key::NUMPAD5),
+            0xFFB6 => Some(Key::NUMPAD6),
+            0xFFB7 => Some(Key::NUMPAD7),
+            0xFFB8 => Some(Key::NUMPAD8),
+            0xFFB9 => Some(Key::NUMPAD9),
+            0xFFAA => Some(Key::MULTIPLY),
+            0xFFAB => Some(Key::ADD),
+            0xFFAC => Some(Key::SEPARATOR),
+            0xFFAD => Some(Key::SUBTRACT),
+            0xFFAE => Some(Key::DECIMAL),
+            0xFFAF => Some(Key::DIVIDE),
+            0xFFBE => Some(Key::F1),
+            0xFFBF => Some(Key::F2),
+            0xFFC0 => Some(Key::F3),
+            0xFFC1 => Some(Key::F4),
+            0xFFC2 => Some(Key::F5),
+            0xFFC3 => Some(Key::F6),
+            0xFFC4 => Some(Key::F7),
+            0xFFC5 => Some(Key::F8),
+            0xFFC6 => Some(Key::F9),
+            0xFFC7 => Some(Key::F10),
+            0xFFC8 => Some(Key::F11),
+            0xFFC9 => Some(Key::F12),
+            0xFFCA => Some(Key::F13),
+            0xFFCB => Some(Key::F14),
+            0xFFCC => Some(Key::F15),
+            0xFFCD => Some(Key::F16),
+            0xFFCE => Some(Key::F17),
+            0xFFCF => Some(Key::F18),
+            0xFFD0 => Some(Key::F19),
+            0xFFD1 => Some(Key::F20),
+            0xFFD2 => Some(Key::F21),
+            0xFFD3 => Some(Key::F22),
+            0xFFD4 => Some(Key::F23),
+            0xFFD5 => Some(Key::F24),
+            0xFF7F => Some(Key::NUMLOCK),
+            0xFF14 => Some(Key::SCROLL),
+            0xFF8D => Some(Key::NUMPADEQUAL),
+            0xFFE7 => Some(Key::LMENU),
+            0xFFE8 => Some(Key::RMENU),
+            0x003B => Some(Key::SEMICOLON),
+            0x002B => Some(Key::PLUS),
+            0x002C => Some(Key::COMMA),
+            0x002D => Some(Key::MINUS),
+            0x002E => Some(Key::PERIOD),
+            0x002F => Some(Key::SLASH),
+            0x0060 => Some(Key::GRAVE),
+            0x0041 => Some(Key::A),
+            0x0042 => Some(Key::B),
+            0x0043 => Some(Key::C),
+            0x0044 => Some(Key::D),
+            0x0045 => Some(Key::E),
+            0x0046 => Some(Key::F),
+            0x0047 => Some(Key::G),
+            0x0048 => Some(Key::H),
+            0x0049 => Some(Key::I),
+            0x004A => Some(Key::J),
+            0x004B => Some(Key::K),
+            0x004C => Some(Key::L),
+            0x004D => Some(Key::M),
+            0x004E => Some(Key::N),
+            0x004F => Some(Key::O),
+            0x0050 => Some(Key::P),
+            0x0051 => Some(Key::Q),
+            0x0052 => Some(Key::R),
+            0x0053 => Some(Key::S),
+            0x0054 => Some(Key::T),
+            0x0055 => Some(Key::U),
+            0x0056 => Some(Key::V),
+            0x0057 => Some(Key::W),
+            0x0058 => Some(Key::X),
+            0x0059 => Some(Key::Y),
+            0x005A => Some(Key::Z),
+            0x0061 => Some(Key::A),
+            0x0062 => Some(Key::B),
+            0x0063 => Some(Key::C),
+            0x0064 => Some(Key::D),
+            0x0065 => Some(Key::E),
+            0x0066 => Some(Key::F),
+            0x0067 => Some(Key::G),
+            0x0068 => Some(Key::H),
+            0x0069 => Some(Key::I),
+            0x006A => Some(Key::J),
+            0x006B => Some(Key::K),
+            0x006C => Some(Key::L),
+            0x006D => Some(Key::M),
+            0x006E => Some(Key::N),
+            0x006F => Some(Key::O),
+            0x0070 => Some(Key::P),
+            0x0071 => Some(Key::Q),
+            0x0072 => Some(Key::R),
+            0x0073 => Some(Key::S),
+            0x0074 => Some(Key::T),
+            0x0075 => Some(Key::U),
+            0x0076 => Some(Key::V),
+            0x0077 => Some(Key::W),
+            0x0078 => Some(Key::X),
+            0x0079 => Some(Key::Y),
+            0x007A => Some(Key::Z),
+            _ => {
+                warn!("Unknown keysym: {:?}", keysym);
+                None
+            }
+        }
     }
 }

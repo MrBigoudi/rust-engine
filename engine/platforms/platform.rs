@@ -1,7 +1,7 @@
-use crate::core::{errors::EngineError, logger::LogLevel};
+use crate::core::{errors::EngineError, systems::logger::LogLevel};
 
 /// Abstract trait for the platform (os) specific code
-pub trait Platform {
+pub(crate) trait Platform {
     /// Initiate the internal structure of the platform
     fn init(
         &mut self,
@@ -45,7 +45,7 @@ pub trait Platform {
 }
 
 /// Initiate the engine platform depending on the OS
-pub fn init_platform(
+pub(crate) fn platform_init(
     window_title: String,
     x: i16,
     y: i16,

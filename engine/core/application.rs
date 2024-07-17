@@ -1,12 +1,10 @@
 use crate::{
     debug, error,
     game::Game,
-    info,
-    platforms::platform::{init_platform, Platform},
-    warn,
+    platforms::platform::{platform_init, Platform},
 };
 
-use super::{errors::EngineError, logger::init_logger};
+use super::{errors::EngineError, systems::input::input_update};
 
 /// Flags for the application
 pub struct ApplicationParametersFlags {
@@ -83,58 +81,23 @@ impl Default for ApplicationParameters {
 }
 
 #[derive(PartialEq)]
-pub enum ApplicationState {
+pub(crate) enum ApplicationState {
     Running,
-    Suspended,
     ShuttingDown,
 }
 
-pub struct Application {
+pub(crate) struct Application {
     pub platform: Box<dyn Platform>,
     pub game: Box<dyn Game>,
     pub state: ApplicationState,
 }
 
-/// Static variable to allow only a single instantiation of the application
-static mut IS_APPLICATION_INITIALIZED: bool = false;
-
-/// Initialize the different subsystems
-fn init_subsystems() -> Result<(), EngineError> {
-    match init_logger() {
-        Ok(()) => (),
-        Err(err) => {
-            error!("Failed to initialize the logger: {:?}", err);
-            return Err(EngineError::InitializationFailed);
-        }
-    }
-    Ok(())
-}
-
 /// Initiate the application
-/// Can only be called once
-pub fn init_application(
+pub(crate) fn application_init(
     parameters: ApplicationParameters,
     game: Box<dyn Game>,
 ) -> Result<Application, EngineError> {
-    if unsafe { IS_APPLICATION_INITIALIZED } {
-        error!("The application is already initialized!");
-        return Err(EngineError::MultipleInstantiation);
-    }
-
-    match init_subsystems() {
-        Ok(()) => (),
-        Err(err) => {
-            error!("Failed to initialize the subsystems: {:?}", err);
-            return Err(EngineError::InitializationFailed);
-        }
-    }
-
-    error!("Test error log");
-    warn!("Test warn log");
-    debug!("Test debug log");
-    info!("Test info log");
-
-    let platform = init_platform(
+    let platform = platform_init(
         parameters.application_name.clone(),
         parameters.initial_x_position,
         parameters.initial_y_position,
@@ -142,6 +105,8 @@ pub fn init_application(
         parameters.initial_height,
         parameters.flags.is_window_resizable,
     );
+
+    debug!("Platform initialized");
 
     let application = match platform {
         Err(err) => {
@@ -155,7 +120,6 @@ pub fn init_application(
         },
     };
 
-    unsafe { IS_APPLICATION_INITIALIZED = true };
     Ok(application)
 }
 
@@ -192,6 +156,18 @@ impl Application {
                 Ok(()) => (),
                 Err(err) => {
                     error!("Failed to render the game: {:?}", err);
+                    return Err(EngineError::Unknown);
+                }
+            }
+
+            // NOTE: Input update/state copying should always be handled
+            // after any input should be recorded; I.E. before this line.
+            // As a safety, input is the last thing to be updated before
+            // this frame ends.
+            match input_update(0.) {
+                Ok(()) => (),
+                Err(err) => {
+                    error!("Failed to update the inputs: {:?}", err);
                     return Err(EngineError::Unknown);
                 }
             }

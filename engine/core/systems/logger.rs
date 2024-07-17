@@ -1,6 +1,7 @@
-use crate::platforms::{platform::Platform, platform_linux::PlatformLinux};
-
-use super::errors::EngineError;
+use crate::{
+    core::errors::EngineError,
+    platforms::{platform::Platform, platform_linux::PlatformLinux},
+};
 
 /// The log levels for the application
 pub enum LogLevel {
@@ -70,16 +71,16 @@ pub fn print_console_error() -> fn(&str, LogLevel) {
 macro_rules! log {
     ($level:expr) => {
         if $level.is_an_error() {
-            $crate::core::logger::print_console_error()(&format!("[{}]\n", $level), $level)
+            $crate::core::systems::logger::print_console_error()(&format!("[{}]\n", $level), $level)
         } else {
-            $crate::core::logger::print_console()(&format!("[{}]\n", $level), $level)
+            $crate::core::systems::logger::print_console()(&format!("[{}]\n", $level), $level)
         }
     };
     ($level:expr, $($arg:tt)*) => {
         if $level.is_an_error() {
-            $crate::core::logger::print_console_error()(&format!("[{}] {}\n", $level, format!($($arg)*)), $level)
+            $crate::core::systems::logger::print_console_error()(&format!("[{}] {}\n", $level, format!($($arg)*)), $level)
         } else {
-            $crate::core::logger::print_console()(&format!("[{}] {}\n", $level, format!($($arg)*)), $level);
+            $crate::core::systems::logger::print_console()(&format!("[{}] {}\n", $level, format!($($arg)*)), $level);
         }
     };
 }
@@ -87,51 +88,51 @@ macro_rules! log {
 #[macro_export]
 macro_rules! error {
     () => {
-        $crate::log!($crate::core::logger::LogLevel::Error);
+        $crate::log!($crate::core::systems::logger::LogLevel::Error);
     };
     ($($arg:tt)*) => {{
-        $crate::log!($crate::core::logger::LogLevel::Error, $($arg)*);
+        $crate::log!($crate::core::systems::logger::LogLevel::Error, $($arg)*);
     }};
 }
 
 #[macro_export]
 macro_rules! warn {
     () => {
-        $crate::log!($crate::core::logger::LogLevel::Warning)
+        $crate::log!($crate::core::systems::logger::LogLevel::Warning)
     };
     ($($arg:tt)*) => {{
-        $crate::log!($crate::core::logger::LogLevel::Warning, $($arg)*)
+        $crate::log!($crate::core::systems::logger::LogLevel::Warning, $($arg)*)
     }};
 }
 
 #[macro_export]
 macro_rules! debug {
     () => {
-        $crate::log!($crate::core::logger::LogLevel::Debug)
+        $crate::log!($crate::core::systems::logger::LogLevel::Debug)
     };
     ($($arg:tt)*) => {{
-        $crate::log!($crate::core::logger::LogLevel::Debug, $($arg)*)
+        $crate::log!($crate::core::systems::logger::LogLevel::Debug, $($arg)*)
     }};
 }
 
 #[macro_export]
 macro_rules! info {
     () => {
-        $crate::log!($crate::core::logger::LogLevel::Info)
+        $crate::log!($crate::core::systems::logger::LogLevel::Info)
     };
     ($($arg:tt)*) => {{
-        $crate::log!($crate::core::logger::LogLevel::Info, $($arg)*)
+        $crate::log!($crate::core::systems::logger::LogLevel::Info, $($arg)*)
     }};
 }
 
 /// Initiate the engine logger
-pub fn init_logger() -> Result<(), EngineError> {
+pub(crate) fn logger_init() -> Result<(), EngineError> {
     // TODO: implement log file
     Ok(())
 }
 
 /// Shutdown the engine logger
-pub fn shutdown_logger() -> Result<(), EngineError> {
+pub(crate) fn logger_shutdown() -> Result<(), EngineError> {
     // TODO:
     Ok(())
 }
