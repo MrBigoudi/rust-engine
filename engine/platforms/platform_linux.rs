@@ -266,14 +266,26 @@ impl Platform for PlatformLinux {
                                 // Keyboard press / release
                                 xcb::x::Event::KeyPress(event) => {
                                     let key_code = event.detail();
-                                    if let Some(key) = self.translate_keycode(key_code, 0) {
+                                    let key_mask =
+                                        if event.state().contains(xcb::x::KeyButMask::SHIFT) {
+                                            1
+                                        } else {
+                                            0
+                                        };
+                                    if let Some(key) = self.translate_keycode(key_code, key_mask) {
                                         // debug!("code pressed: {:?}", key);
                                         intput_process_key(key, KeyState::Pressed)?;
                                     };
                                 }
                                 xcb::x::Event::KeyRelease(event) => {
                                     let key_code = event.detail();
-                                    if let Some(key) = self.translate_keycode(key_code, 0) {
+                                    let key_mask =
+                                        if event.state().contains(xcb::x::KeyButMask::SHIFT) {
+                                            1
+                                        } else {
+                                            0
+                                        };
+                                    if let Some(key) = self.translate_keycode(key_code, key_mask) {
                                         // debug!("code release: {:?}", key);
                                         intput_process_key(key, KeyState::Released)?;
                                     };
