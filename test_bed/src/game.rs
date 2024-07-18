@@ -8,12 +8,12 @@ impl Game for TestBedGame {
         Ok(())
     }
 
-    fn update(&mut self, _delta_time: f32) -> Result<(), engine::core::errors::EngineError> {
+    fn update(&mut self, _delta_time: f64) -> Result<(), engine::core::errors::EngineError> {
         // TODO:
         Ok(())
     }
 
-    fn render(&self, _delta_time: f32) -> Result<(), engine::core::errors::EngineError> {
+    fn render(&self, _delta_time: f64) -> Result<(), engine::core::errors::EngineError> {
         // TODO:
         Ok(())
     }

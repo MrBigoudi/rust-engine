@@ -15,7 +15,7 @@ use crate::{
             logger::LogLevel,
         },
     },
-    debug, error, warn,
+    error, warn,
 };
 
 use super::platform::Platform;
@@ -234,19 +234,20 @@ impl Platform for PlatformLinux {
         }
     }
 
-    fn get_absolute_time_in_seconds(&self) -> f64 {
+    fn get_absolute_time_in_seconds(&self) -> Result<f64, EngineError> {
         match std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH) {
-            Ok(duration) => duration.as_secs_f64(),
+            Ok(duration) => Ok(duration.as_secs_f64()),
             Err(_) => {
                 error!("SystemTime before UNIX EPOCH!");
-                panic!()
+                Err(EngineError::InvalidValue)
             }
         }
     }
 
-    fn sleep_from_milliseconds(&self, ms: u64) {
+    fn sleep_from_milliseconds(&self, ms: u64) -> Result<(), EngineError> {
         let duration_from_milliseconds = std::time::Duration::from_millis(ms);
         std::thread::sleep(duration_from_milliseconds);
+        Ok(())
     }
 
     fn handle_events(&mut self) -> Result<bool, EngineError> {

@@ -6,6 +6,7 @@ use crate::{
     },
     debug, error,
     game::Game,
+    renderer::renderer_frontend::{renderer_init, renderer_shutdown},
 };
 
 /// Static variable to allow only a single instantiation of the engine
@@ -23,6 +24,8 @@ fn engine_init(
         return Err(EngineError::MultipleInstantiation);
     }
 
+    let app_name = parameters.application_name.clone();
+
     match subsystems_init() {
         Ok(()) => (),
         Err(err) => {
@@ -32,7 +35,7 @@ fn engine_init(
     }
     debug!("Subsystems initialized");
 
-    let application = match application_init(parameters, game) {
+    let mut application = match application_init(parameters, game) {
         Ok(application) => application,
         Err(err) => {
             error!("Failed to create the application: {:?}", err);
@@ -40,6 +43,15 @@ fn engine_init(
         }
     };
     debug!("Application initialized");
+
+    match renderer_init(&app_name.clone(), application.platform.as_mut()) {
+        Ok(()) => (),
+        Err(err) => {
+            error!("Failed to initialize the renderer: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        }
+    }
+    debug!("Renderer initialized");
 
     unsafe { IS_ENGINE_INITIALIZED = true };
 
@@ -59,6 +71,15 @@ fn game_loop(application: &mut Application) -> Result<(), EngineError> {
 
 /// Cleanup the engine
 fn engine_shutdown(application: &mut Application) -> Result<(), EngineError> {
+    match renderer_shutdown() {
+        Ok(()) => (),
+        Err(err) => {
+            error!("Failed to shutdown the renderer: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        }
+    }
+    debug!("Renderer shutted down");
+
     match application.shutdown() {
         Ok(()) => (),
         Err(err) => {

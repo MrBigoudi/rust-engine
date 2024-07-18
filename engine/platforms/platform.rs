@@ -1,4 +1,7 @@
-use crate::core::{errors::EngineError, systems::logger::LogLevel};
+use crate::{
+    core::{errors::EngineError, systems::logger::LogLevel},
+    error,
+};
 
 /// Abstract trait for the platform (os) specific code
 pub(crate) trait Platform {
@@ -22,10 +25,16 @@ pub(crate) trait Platform {
 
     /// Ellapsed time in seconds since the UNIX_EPOCH
     /// Panic if an error occurs
-    fn get_absolute_time_in_seconds(&self) -> f64;
+    fn get_absolute_time_in_seconds(&self) -> Result<f64, EngineError> {
+        error!("Function `get_absolute_time_in_seconds' is not implemented for this platform");
+        Err(EngineError::NotImplemented)
+    }
 
     /// Multithreading compatible sleep
-    fn sleep_from_milliseconds(&self, ms: u64);
+    fn sleep_from_milliseconds(&self, ms: u64) -> Result<(), EngineError> {
+        error!("Function `sleep_from_milliseconds' is not implemented for this platform");
+        Err(EngineError::NotImplemented)
+    }
 
     /// Defaut output on the console
     fn console_write(message: &str, _log_level: LogLevel)

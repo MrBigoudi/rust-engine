@@ -4,7 +4,7 @@ use crate::{
     platforms::platform::{platform_init, Platform},
 };
 
-use super::{errors::EngineError, systems::input::input_update};
+use super::{clock::Clock, errors::EngineError, systems::input::input_update};
 
 /// Flags for the application
 pub struct ApplicationParametersFlags {
@@ -90,6 +90,8 @@ pub(crate) struct Application {
     pub platform: Box<dyn Platform>,
     pub game: Box<dyn Game>,
     pub state: ApplicationState,
+    pub clock: Clock,
+    pub last_time: f64,
 }
 
 /// Initiate the application
@@ -117,6 +119,8 @@ pub(crate) fn application_init(
             platform: Box::new(platform),
             state: ApplicationState::Running,
             game,
+            clock: Clock::default(),
+            last_time: 0.,
         },
     };
 
@@ -126,6 +130,14 @@ pub(crate) fn application_init(
 impl Application {
     /// Run the application
     pub fn run(&mut self) -> Result<(), EngineError> {
+        self.clock.start(self.platform.as_mut())?;
+        self.clock.update(self.platform.as_mut())?;
+        self.last_time = self.clock.elapsed_time;
+
+        let mut running_time: f64 = 0.;
+        let mut frame_count: u32 = 0;
+        let target_frame_seconds: f64 = 1. / 60.;
+
         'main_loop: while self.state == ApplicationState::Running {
             // handle the events
             let should_quit = match self.platform.handle_events() {
@@ -142,8 +154,14 @@ impl Application {
                 break 'main_loop;
             }
 
+            // update clock and get delta time.
+            self.clock.update(self.platform.as_mut())?;
+            let current_time: f64 = self.clock.elapsed_time;
+            let delta: f64 = current_time - self.last_time;
+            let frame_start_time: f64 = self.platform.as_ref().get_absolute_time_in_seconds()?;
+
             // update the game
-            match self.game.update(0.) {
+            match self.game.update(delta) {
                 Ok(()) => (),
                 Err(err) => {
                     error!("Failed to update the game: {:?}", err);
@@ -152,7 +170,7 @@ impl Application {
             }
 
             // render the game
-            match self.game.render(0.) {
+            match self.game.render(delta) {
                 Ok(()) => (),
                 Err(err) => {
                     error!("Failed to render the game: {:?}", err);
@@ -160,17 +178,39 @@ impl Application {
                 }
             }
 
+            // Figure out how long the frame took and, if below
+            let frame_end_time: f64 = self.platform.get_absolute_time_in_seconds()?;
+            let frame_elapsed_time: f64 = frame_end_time - frame_start_time;
+            running_time += frame_elapsed_time;
+            let remaining_seconds: f64 = target_frame_seconds - frame_elapsed_time;
+
+            if remaining_seconds > 0. {
+                let remaining_ms: u64 = remaining_seconds as u64 * 1000;
+
+                // If there is time left, give it back to the OS.
+                let limit_frames = false;
+                if remaining_ms > 0 && limit_frames {
+                    self.platform.sleep_from_milliseconds(remaining_ms - 1)?;
+                }
+
+                frame_count += 1;
+            }
+
             // NOTE: Input update/state copying should always be handled
             // after any input should be recorded; I.E. before this line.
             // As a safety, input is the last thing to be updated before
             // this frame ends.
-            match input_update(0.) {
+            match input_update(delta) {
                 Ok(()) => (),
                 Err(err) => {
                     error!("Failed to update the inputs: {:?}", err);
                     return Err(EngineError::Unknown);
                 }
             }
+
+            debug!("delta: {}, last_time: {}", delta, self.last_time);
+            // update last time
+            self.last_time = current_time;
         }
         Ok(())
     }

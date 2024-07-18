@@ -8,4 +8,5 @@ pub enum EngineError {
     NotInitialized,
     Duplicate,
     InvalidValue,
+    NotImplemented,
 }
