@@ -1,11 +1,11 @@
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 
 use crate::{core::errors::EngineError, error, warn};
 
 /// System internal event codes
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub(crate) enum EventCode {
     /// Shuts the application down on the next frame
     ApplicationQuit,
@@ -25,9 +25,36 @@ pub(crate) enum EventCode {
     Resized { width: u16, height: u16 },
 }
 
+impl EventCode {
+    pub fn any_key_pressed() -> Self {
+        EventCode::KeyPressed { key_code: 0 }
+    }
+    pub fn any_key_released() -> Self {
+        EventCode::KeyReleased { key_code: 0 }
+    }
+    pub fn any_mouse_button_pressed() -> Self {
+        EventCode::MouseButtonPressed { button: 0 }
+    }
+    pub fn any_mouse_button_released() -> Self {
+        EventCode::MouseButtonReleased { button: 0 }
+    }
+    pub fn any_mouse_moved() -> Self {
+        EventCode::MouseMoved { x: 0, y: 0 }
+    }
+    pub fn any_mouse_wheel() -> Self {
+        EventCode::MouseWheel { z_delta: 0 }
+    }
+    pub fn any_resized() -> Self {
+        EventCode::Resized {
+            width: 0,
+            height: 0,
+        }
+    }
+}
+
 pub(crate) const NUMBER_OF_EVENT_CODES: usize = 8;
 
-pub(crate) trait EventListener: Sync {
+pub(crate) trait EventListener {
     /// Callback to be called when an event is received
     /// Return true if don't want any other listener to handle the event
     fn on_event_callback(&mut self, code: EventCode) -> Result<bool, EngineError>;
@@ -36,7 +63,7 @@ pub(crate) trait EventListener: Sync {
 /// Register to listen for when events are sent with the provided code
 pub(crate) fn event_register(
     code: EventCode,
-    listener: impl EventListener + 'static,
+    listener: Arc<Mutex<dyn EventListener>>,
 ) -> Result<(), EngineError> {
     let global_events_system = match fetch_global_events(EngineError::Unknown) {
         Ok(events_system) => events_system,
@@ -51,7 +78,7 @@ pub(crate) fn event_register(
 /// Register to listen for when events are sent with the provided code
 pub(crate) fn event_unregister(
     code: EventCode,
-    listener: impl EventListener + 'static,
+    listener: Arc<Mutex<dyn EventListener>>,
 ) -> Result<(), EngineError> {
     let global_events_system = match fetch_global_events(EngineError::Unknown) {
         Ok(events_system) => events_system,
@@ -76,7 +103,7 @@ pub(crate) fn event_fire(code: EventCode) -> Result<(), EngineError> {
 }
 
 pub(crate) struct EventListenerRegistered {
-    listener: Box<dyn EventListener>,
+    listener: Arc<Mutex<dyn EventListener>>,
 }
 
 impl PartialEq for EventListenerRegistered {
@@ -117,16 +144,14 @@ impl EventSystem {
     pub fn event_register(
         &mut self,
         code: EventCode,
-        listener: impl EventListener + 'static,
+        listener: Arc<Mutex<dyn EventListener>>,
     ) -> Result<(), EngineError> {
         if !self.is_initialized {
             let err = EngineError::NotInitialized;
             error!("The events system is not initialized : {:?}", err);
             return Err(err);
         }
-        let listener_to_register = EventListenerRegistered {
-            listener: Box::new(listener),
-        };
+        let listener_to_register = EventListenerRegistered { listener };
         let registered_listeners =
             &mut self.lookup_table[EventSystem::get_lookup_table_index(code)];
         if !registered_listeners.contains(&listener_to_register) {
@@ -145,16 +170,14 @@ impl EventSystem {
     pub fn event_unregister(
         &mut self,
         code: EventCode,
-        listener: impl EventListener + 'static,
+        listener: Arc<Mutex<dyn EventListener>>,
     ) -> Result<(), EngineError> {
         if !self.is_initialized {
             let err = EngineError::NotInitialized;
             error!("The events system is not initialized : {:?}", err);
             return Err(err);
         }
-        let listener_to_register = EventListenerRegistered {
-            listener: Box::new(listener),
-        };
+        let listener_to_register = EventListenerRegistered { listener };
         let registered_listeners =
             &mut self.lookup_table[EventSystem::get_lookup_table_index(code)];
         registered_listeners
@@ -167,16 +190,24 @@ impl EventSystem {
         let registered_listeners =
             &mut self.lookup_table[EventSystem::get_lookup_table_index(code)];
         for registered_listener in registered_listeners {
-            match registered_listener.listener.on_event_callback(code) {
-                Ok(keep_handling) => {
-                    if !keep_handling {
-                        return Ok(());
+            let listener_lock = registered_listener.listener.lock();
+            if let Ok(mut listener) = listener_lock {
+                match listener.on_event_callback(code) {
+                    Ok(keep_handling) => {
+                        if !keep_handling {
+                            return Ok(());
+                        }
+                    }
+                    Err(err) => {
+                        error!("Failed to run the listener callback: {:?}", err);
+                        return Err(err);
                     }
                 }
-                Err(err) => {
-                    error!("Failed to run the listener callback: {:?}", err);
-                    return Err(err);
-                }
+                // MutexGuard listener is dropped here, releasing the lock
+            } else {
+                // Handle case where lock cannot be acquired
+                warn!("Failed to acquire lock for listener");
+                return Err(EngineError::Synchronisation);
             }
         }
         Ok(())

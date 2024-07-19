@@ -35,7 +35,7 @@ fn engine_init(
     }
     debug!("Subsystems initialized");
 
-    let mut application = match application_init(parameters, game) {
+    let application = match application_init(parameters, game) {
         Ok(application) => application,
         Err(err) => {
             error!("Failed to create the application: {:?}", err);
@@ -44,7 +44,7 @@ fn engine_init(
     };
     debug!("Application initialized");
 
-    match renderer_init(&app_name.clone(), application.platform.as_mut()) {
+    match renderer_init(&app_name.clone(), application.platform.as_ref()) {
         Ok(()) => (),
         Err(err) => {
             error!("Failed to initialize the renderer: {:?}", err);
@@ -125,7 +125,7 @@ pub fn engine_start(
     };
     debug!("Engine initialized");
 
-    // Game loop.
+    // Game loop
     game_loop(&mut application)?;
 
     // Cleanup

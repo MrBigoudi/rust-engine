@@ -9,4 +9,7 @@ pub enum EngineError {
     Duplicate,
     InvalidValue,
     NotImplemented,
+    VulkanFailed,
+    AccessFailed,
+    Synchronisation,
 }
