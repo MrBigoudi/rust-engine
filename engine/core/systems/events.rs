@@ -2,7 +2,7 @@ use std::sync::{Arc, Mutex};
 
 use once_cell::sync::Lazy;
 
-use crate::{core::errors::EngineError, error, warn};
+use crate::{core::debug::errors::EngineError, error, warn};
 
 /// System internal event codes
 #[derive(Clone, Copy, Debug)]

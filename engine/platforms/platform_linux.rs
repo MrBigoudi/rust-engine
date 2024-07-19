@@ -1,9 +1,11 @@
+use std::ffi::{c_char, CStr};
+
 /// Linux implementation of the platform trait
 use xcb::Xid;
 
 use crate::{
     core::{
-        errors::EngineError,
+        debug::errors::EngineError,
         systems::{
             input::{
                 keyboard::{intput_process_key, Key, KeyState},
@@ -393,6 +395,20 @@ impl Platform for PlatformLinux {
             PlatformLinux::get_color(log_level),
             message
         );
+    }
+
+    fn get_required_extensions(&self) -> Result<Vec<*const i8>, EngineError> {
+        let required_extensions_cstr = [
+            unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_surface\0") },
+            unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_xcb_surface\0") },
+        ];
+
+        let required_extensions: Vec<*const c_char> = required_extensions_cstr
+            .iter()
+            .map(|raw_name| raw_name.as_ptr())
+            .collect();
+
+        Ok(required_extensions)
     }
 }
 

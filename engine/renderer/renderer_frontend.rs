@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
-use crate::{core::errors::EngineError, error, platforms::platform::Platform};
+use crate::{core::debug::errors::EngineError, error, platforms::platform::Platform};
 
 use super::{
     renderer_backend::{renderer_backend_init, RendererBackend},

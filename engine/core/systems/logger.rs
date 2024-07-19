@@ -1,5 +1,5 @@
 use crate::{
-    core::errors::EngineError,
+    core::debug::errors::EngineError,
     platforms::{platform::Platform, platform_linux::PlatformLinux},
 };
 

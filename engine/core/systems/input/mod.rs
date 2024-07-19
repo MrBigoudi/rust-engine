@@ -4,7 +4,7 @@ use keyboard::{Key, KeyState, KeyboardState};
 use mouse::{MouseButton, MouseButtonState, MouseState};
 use once_cell::sync::Lazy;
 
-use crate::{core::errors::EngineError, error};
+use crate::{core::debug::errors::EngineError, error};
 
 pub mod keyboard;
 pub mod mouse;

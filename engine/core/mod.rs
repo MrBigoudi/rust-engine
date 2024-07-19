@@ -1,4 +1,3 @@
 pub mod application;
-pub mod clock;
-pub mod errors;
+pub mod debug;
 pub mod systems;

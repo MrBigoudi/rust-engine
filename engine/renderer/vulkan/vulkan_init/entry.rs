@@ -1,10 +1,20 @@
 use ash::Entry;
 
 use crate::{
-    core::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend,
+    core::debug::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend,
 };
 
 impl VulkanRendererBackend<'_> {
+    pub fn get_entry(&self) -> Result<&Entry, EngineError> {
+        match &self.context.entry {
+            Some(entry) => Ok(entry),
+            None => {
+                error!("Can't access the vulkan entry");
+                Err(EngineError::AccessFailed)
+            }
+        }
+    }
+
     pub fn init_entry(&mut self) -> Result<(), EngineError> {
         unsafe {
             self.context.entry = Some(match Entry::load() {
@@ -16,6 +26,10 @@ impl VulkanRendererBackend<'_> {
             });
         }
 
+        Ok(())
+    }
+
+    pub fn shutdown_entry(&mut self) -> Result<(), EngineError> {
         Ok(())
     }
 }

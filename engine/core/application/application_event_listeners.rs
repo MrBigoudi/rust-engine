@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use crate::{
     core::{
         application::ApplicationState,
-        errors::EngineError,
+        debug::errors::EngineError,
         systems::{
             events::{event_fire, event_register, EventCode, EventListener},
             input::keyboard::Key,
         },
     },
-    debug, error,
+    error,
 };
 
 use super::{Application, ApplicationInternalState};
@@ -30,7 +30,6 @@ impl ApplicationOnQuitListener {
 }
 impl EventListener for ApplicationOnQuitListener {
     fn on_event_callback(&mut self, code: EventCode) -> Result<bool, EngineError> {
-        debug!("quit callback");
         self.get_internal_state()?.state = ApplicationState::ShuttingDown;
         Ok(true)
     }
@@ -44,9 +43,7 @@ impl EventListener for ApplicationOnKeyPressedListener {
             EventCode::KeyPressed { key_code } => key_code,
             _ => return Err(EngineError::InvalidValue),
         };
-        debug!("key callback");
         if key_code == (Key::ESCAPE as u16) {
-            debug!("Quit event fired");
             match event_fire(EventCode::ApplicationQuit) {
                 Ok(_) => return Ok(true),
                 Err(err) => {
@@ -92,7 +89,6 @@ impl EventListener for ApplicationOnKeyReleasedListener {
             EventCode::KeyReleased { key_code } => key_code,
             _ => return Err(EngineError::InvalidValue),
         };
-        debug!("key released callback: {:?}", key_code);
         Ok(false)
     }
 }

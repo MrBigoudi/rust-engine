@@ -1,4 +1,4 @@
-use crate::{core::errors::EngineError, error, platforms::platform::Platform};
+use crate::{core::debug::errors::EngineError, error, platforms::platform::Platform};
 
 use super::{renderer_types::RendererBackendType, vulkan::vulkan_types::VulkanRendererBackend};
 

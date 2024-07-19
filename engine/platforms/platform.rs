@@ -1,5 +1,5 @@
 use crate::{
-    core::{errors::EngineError, systems::logger::LogLevel},
+    core::{debug::errors::EngineError, systems::logger::LogLevel},
     error,
 };
 
@@ -36,6 +36,8 @@ pub(crate) trait Platform {
         Err(EngineError::NotImplemented)
     }
 
+    /// Get the required extensions for the renderer
+    fn get_required_extensions(&self) -> Result<Vec<*const i8>, EngineError>;
     /// Defaut output on the console
     fn console_write(message: &str, _log_level: LogLevel)
     where

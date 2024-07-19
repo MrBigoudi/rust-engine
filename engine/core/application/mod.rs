@@ -6,7 +6,7 @@ use crate::{
     platforms::platform::{platform_init, Platform},
 };
 
-use super::{clock::Clock, errors::EngineError, systems::input::input_update};
+use super::{debug::clock::Clock, debug::errors::EngineError, systems::input::input_update};
 
 /// Flags for the application
 pub struct ApplicationParametersFlags {

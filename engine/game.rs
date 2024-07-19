@@ -1,4 +1,4 @@
-use crate::core::errors::EngineError;
+use crate::core::debug::errors::EngineError;
 
 /// Game state
 /// Called by the application

@@ -1,6 +1,6 @@
 use crate::{
     core::{
-        errors::EngineError,
+        debug::errors::EngineError,
         systems::events::{event_fire, EventCode},
     },
     error,

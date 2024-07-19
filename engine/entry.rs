@@ -1,7 +1,7 @@
 use crate::{
     core::{
         application::{application_init, Application, ApplicationParameters},
-        errors::EngineError,
+        debug::errors::EngineError,
         systems::{subsystems_init, subsystems_shutdown},
     },
     debug, error,
