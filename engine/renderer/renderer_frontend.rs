@@ -89,7 +89,7 @@ impl RendererFrontend {
                     Err(err) => {
                         error!("Failed to end the renderer frontend frame: {:?}", err);
                         Err(EngineError::Unknown)
-                    },
+                    }
                     Ok(()) => Ok(()),
                 }
             }
@@ -122,7 +122,7 @@ pub(crate) fn renderer_init(
         Err(err) => {
             error!("Failed to initialize the renderer: {:?}", err);
             return Err(EngineError::InitializationFailed);
-        },
+        }
     }
     Ok(())
 }
@@ -135,7 +135,7 @@ pub(crate) fn renderer_shutdown() -> Result<(), EngineError> {
         Err(err) => {
             error!("Failed to shutdown the renderer: {:?}", err);
             return Err(EngineError::ShutdownFailed);
-        },
+        }
     }
     unsafe {
         // Empty GLOBAL_EVENTS

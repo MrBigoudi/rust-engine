@@ -1,15 +1,9 @@
 use crate::{core::errors::EngineError, error, platforms::platform::Platform};
 
-use super::{
-    renderer_types::RendererBackendType, vulkan::vulkan_renderer_backend::VulkanRendererBackend,
-};
+use super::{renderer_types::RendererBackendType, vulkan::vulkan_types::VulkanRendererBackend};
 
 pub(crate) trait RendererBackend {
-    fn init(
-        &mut self,
-        application_name: &str,
-        platform: &dyn Platform,
-    ) -> Result<(), EngineError>;
+    fn init(&mut self, application_name: &str, platform: &dyn Platform) -> Result<(), EngineError>;
 
     fn shutdown(&mut self) -> Result<(), EngineError>;
 

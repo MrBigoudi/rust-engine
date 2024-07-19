@@ -1,21 +1,20 @@
 use crate::{platforms::platform::Platform, renderer::renderer_backend::RendererBackend};
 
-#[derive(Default)]
-pub(crate) struct VulkanRendererBackend {
-    frame_number: u64,
-}
+use super::vulkan_types::VulkanRendererBackend;
 
-impl RendererBackend for VulkanRendererBackend {
+impl RendererBackend for VulkanRendererBackend<'_> {
     fn init(
         &mut self,
         application_name: &str,
         platform: &dyn Platform,
     ) -> Result<(), crate::core::errors::EngineError> {
-        todo!()
+        self.init_entry()?;
+        self.init_instance(application_name, platform)?;
+        Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), crate::core::errors::EngineError> {
-        todo!()
+        Ok(())
     }
 
     fn resize(&mut self, width: u16, height: u16) -> Result<(), crate::core::errors::EngineError> {
