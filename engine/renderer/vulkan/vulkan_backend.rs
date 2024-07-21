@@ -7,12 +7,12 @@ use super::vulkan_types::VulkanRendererBackend;
 
 impl RendererBackend for VulkanRendererBackend<'_> {
     fn init(&mut self, application_name: &str, platform: &dyn Platform) -> Result<(), EngineError> {
-        self.init_vulkan(application_name, platform)?;
+        self.vulkan_init(application_name, platform)?;
         Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), EngineError> {
-        self.shutdown_vulkan()?;
+        self.vulkan_shutdown()?;
         Ok(())
     }
 

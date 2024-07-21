@@ -264,7 +264,7 @@ impl Application {
         match self.platform.shutdown() {
             Err(err) => {
                 error!("Failed to shut down the application: {:?}", err);
-                Err(EngineError::CleaningFailed)
+                Err(EngineError::ShutdownFailed)
             }
             Ok(()) => Ok(()),
         }

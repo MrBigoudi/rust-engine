@@ -399,7 +399,6 @@ impl Platform for PlatformLinux {
 
     fn get_required_extensions(&self) -> Result<Vec<*const i8>, EngineError> {
         let required_extensions_cstr = [
-            unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_surface\0") },
             unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_xcb_surface\0") },
         ];
 

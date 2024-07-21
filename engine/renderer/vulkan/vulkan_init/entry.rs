@@ -15,7 +15,7 @@ impl VulkanRendererBackend<'_> {
         }
     }
 
-    pub fn init_entry(&mut self) -> Result<(), EngineError> {
+    pub fn entry_init(&mut self) -> Result<(), EngineError> {
         unsafe {
             self.context.entry = Some(match Entry::load() {
                 Ok(entry) => entry,
@@ -29,7 +29,7 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
-    pub fn shutdown_entry(&mut self) -> Result<(), EngineError> {
+    pub fn entry_shutdown(&mut self) -> Result<(), EngineError> {
         Ok(())
     }
 }

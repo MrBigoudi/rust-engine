@@ -3,8 +3,9 @@ use std::ffi::{CStr, CString};
 use ash::vk::{make_api_version, ApplicationInfo, InstanceCreateInfo, API_VERSION_1_3};
 
 use crate::{
-    core::debug::errors::EngineError, error, platforms::platform::Platform,
+    core::debug::{errors::EngineError}, error, platforms::platform::Platform,
     renderer::vulkan::vulkan_types::VulkanRendererBackend,
+    debug
 };
 
 impl VulkanRendererBackend<'_> {
@@ -65,18 +66,34 @@ impl VulkanRendererBackend<'_> {
     ) -> Result<Vec<*const i8>, EngineError> {
         let mut required_extensions = platform.get_required_extensions()?;
         required_extensions.push(unsafe {
-            CStr::from_bytes_with_nul_unchecked(b"VK_KHR_SURFACE_EXTENSION_NAME\0").as_ptr()
+            CStr::from_bytes_with_nul_unchecked(b"VK_KHR_surface\0").as_ptr()
         });
-
+        
         #[cfg(debug_assertions)]
         required_extensions.push(unsafe {
-            CStr::from_bytes_with_nul_unchecked(b"VK_EXT_DEBUG_UTILS_EXTENSION_NAME\0").as_ptr()
+            CStr::from_bytes_with_nul_unchecked(b"VK_EXT_debug_utils\0").as_ptr()
         });
 
         Ok(required_extensions)
     }
 
-    pub fn init_instance(
+    fn display_extensions(extensions: &Vec<*const i8>){
+        debug!("Extensions:");
+        for extension in extensions {
+            let extension_name = unsafe { CStr::from_ptr(*extension).to_string_lossy() };
+            debug!("\t{:?}", extension_name);
+        }
+    }
+
+    fn display_layers(layers: &Vec<*const i8>){
+        debug!("Layers:");
+        for layer in layers {
+            let layer_name = unsafe { CStr::from_ptr(*layer).to_string_lossy() };
+            debug!("\t{:?}", layer_name);
+        }
+    }
+
+    pub fn instance_init(
         &mut self,
         application_name: &str,
         platform: &dyn Platform,
@@ -92,10 +109,16 @@ impl VulkanRendererBackend<'_> {
             .engine_version(make_api_version(0, 1, 0, 0));
 
         // Get the required extensions
-        let required_extensions = platform.get_required_extensions()?;
+        let required_extensions = self.get_required_extensions(platform)?;
 
         // Get the required layers
         let required_layers = self.get_required_layers()?;
+
+        #[cfg(debug_assertions)]
+        Self::display_extensions(&required_extensions);
+        
+        #[cfg(debug_assertions)]
+        Self::display_layers(&required_layers);
 
         let instance_create_info = InstanceCreateInfo::default()
             .application_info(&application_info)
@@ -119,7 +142,7 @@ impl VulkanRendererBackend<'_> {
         }
     }
 
-    pub fn shutdown_instance(&mut self) -> Result<(), EngineError> {
+    pub fn instance_shutdown(&mut self) -> Result<(), EngineError> {
         unsafe {
             self.get_instance()?.destroy_instance(self.get_allocator()?);
         }
