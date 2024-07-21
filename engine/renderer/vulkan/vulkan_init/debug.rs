@@ -3,7 +3,8 @@ use std::{borrow::Cow, ffi::CStr};
 use ash::{ext::debug_utils, vk};
 
 use crate::{
-    core::debug::errors::EngineError, debug, error, info, renderer::vulkan::vulkan_types::VulkanRendererBackend, warn
+    core::debug::errors::EngineError, debug, error, info,
+    renderer::vulkan::vulkan_types::VulkanRendererBackend, warn,
 };
 
 /// Callback function for Vulkan debug messages.

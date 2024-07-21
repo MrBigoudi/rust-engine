@@ -1,5 +1,9 @@
-use std::ffi::{c_char, CStr};
+use std::{
+    ffi::{c_char, CStr},
+    os::raw::c_void,
+};
 
+use ash::vk::XcbSurfaceCreateInfoKHR;
 /// Linux implementation of the platform trait
 use xcb::Xid;
 
@@ -17,7 +21,9 @@ use crate::{
             logger::LogLevel,
         },
     },
-    error, warn,
+    error,
+    renderer::vulkan::vulkan_types::VulkanContext,
+    warn,
 };
 
 use super::platform::Platform;
@@ -398,9 +404,8 @@ impl Platform for PlatformLinux {
     }
 
     fn get_required_extensions(&self) -> Result<Vec<*const i8>, EngineError> {
-        let required_extensions_cstr = [
-            unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_xcb_surface\0") },
-        ];
+        let required_extensions_cstr =
+            [unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_xcb_surface\0") }];
 
         let required_extensions: Vec<*const c_char> = required_extensions_cstr
             .iter()
@@ -408,6 +413,53 @@ impl Platform for PlatformLinux {
             .collect();
 
         Ok(required_extensions)
+    }
+
+    fn get_vulkan_surface(
+        &self,
+        vulkan_context: &VulkanContext,
+    ) -> Result<ash::vk::SurfaceKHR, EngineError> {
+        let connection = self.connection.as_ref().unwrap();
+        let window = match self.window {
+            Some(window) => window,
+            None => {
+                error!("Failed to fetch the xcb window when creating the vulkan surface on linux");
+                return Err(EngineError::Unknown);
+            }
+        };
+
+        let create_info_khr = XcbSurfaceCreateInfoKHR::default()
+            .connection(connection.get_raw_conn() as *mut c_void)
+            .window(window.resource_id());
+
+        let vk_entry = match &vulkan_context.entry {
+            Some(entry) => entry,
+            None => {
+                error!("Failed to fetch the vulkan entry when creating the surface on linux");
+                return Err(EngineError::NotInitialized);
+            }
+        };
+        let vk_instance = match &vulkan_context.instance {
+            Some(instance) => instance,
+            None => {
+                error!("Failed to fetch the vulkan instance when creating the surface on linux");
+                return Err(EngineError::NotInitialized);
+            }
+        };
+        // create surface instance
+        let surface_instance = ash::khr::xcb_surface::Instance::new(vk_entry, vk_instance);
+        // create the surface
+        let surface = unsafe {
+            match surface_instance.create_xcb_surface(&create_info_khr, vulkan_context.allocator) {
+                Ok(surface) => surface,
+                Err(err) => {
+                    error!("Failed to create the xcb surface: {:?}", err);
+                    return Err(EngineError::VulkanFailed);
+                }
+            }
+        };
+
+        Ok(surface)
     }
 }
 

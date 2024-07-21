@@ -3,9 +3,8 @@ use std::ffi::{CStr, CString};
 use ash::vk::{make_api_version, ApplicationInfo, InstanceCreateInfo, API_VERSION_1_3};
 
 use crate::{
-    core::debug::{errors::EngineError}, error, platforms::platform::Platform,
+    core::debug::errors::EngineError, debug, error, platforms::platform::Platform,
     renderer::vulkan::vulkan_types::VulkanRendererBackend,
-    debug
 };
 
 impl VulkanRendererBackend<'_> {
@@ -65,19 +64,17 @@ impl VulkanRendererBackend<'_> {
         platform: &dyn Platform,
     ) -> Result<Vec<*const i8>, EngineError> {
         let mut required_extensions = platform.get_required_extensions()?;
-        required_extensions.push(unsafe {
-            CStr::from_bytes_with_nul_unchecked(b"VK_KHR_surface\0").as_ptr()
-        });
-        
+        required_extensions
+            .push(unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_surface\0").as_ptr() });
+
         #[cfg(debug_assertions)]
-        required_extensions.push(unsafe {
-            CStr::from_bytes_with_nul_unchecked(b"VK_EXT_debug_utils\0").as_ptr()
-        });
+        required_extensions
+            .push(unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_EXT_debug_utils\0").as_ptr() });
 
         Ok(required_extensions)
     }
 
-    fn display_extensions(extensions: &Vec<*const i8>){
+    fn display_extensions(extensions: &Vec<*const i8>) {
         debug!("Extensions:");
         for extension in extensions {
             let extension_name = unsafe { CStr::from_ptr(*extension).to_string_lossy() };
@@ -85,7 +82,7 @@ impl VulkanRendererBackend<'_> {
         }
     }
 
-    fn display_layers(layers: &Vec<*const i8>){
+    fn display_layers(layers: &Vec<*const i8>) {
         debug!("Layers:");
         for layer in layers {
             let layer_name = unsafe { CStr::from_ptr(*layer).to_string_lossy() };
@@ -116,7 +113,7 @@ impl VulkanRendererBackend<'_> {
 
         #[cfg(debug_assertions)]
         Self::display_extensions(&required_extensions);
-        
+
         #[cfg(debug_assertions)]
         Self::display_layers(&required_layers);
 

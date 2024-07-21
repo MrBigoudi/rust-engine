@@ -1,6 +1,7 @@
 use crate::{
     core::{debug::errors::EngineError, systems::logger::LogLevel},
     error,
+    renderer::vulkan::vulkan_types::VulkanContext,
 };
 
 /// Abstract trait for the platform (os) specific code
@@ -45,6 +46,12 @@ pub(crate) trait Platform {
     {
         print!("{}", message);
     }
+
+    /// Get the vulkan surface
+    fn get_vulkan_surface(
+        &self,
+        vulkan_context: &VulkanContext,
+    ) -> Result<ash::vk::SurfaceKHR, EngineError>;
 
     /// Defaut output on the console for errors
     fn console_write_error(message: &str, _log_level: LogLevel)

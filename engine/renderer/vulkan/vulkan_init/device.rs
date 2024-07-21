@@ -1,8 +1,10 @@
 use ash::{vk::PhysicalDevice, Device};
 
-use crate::{core::debug::errors::EngineError, renderer::vulkan::vulkan_types::VulkanRendererBackend};
+use crate::{
+    core::debug::errors::EngineError, renderer::vulkan::vulkan_types::VulkanRendererBackend,
+};
 
-impl VulkanRendererBackend<'_>{
+impl VulkanRendererBackend<'_> {
     pub fn physical_device_init(&mut self) -> Result<(), EngineError> {
         todo!()
     }
@@ -14,7 +16,6 @@ impl VulkanRendererBackend<'_>{
     pub fn get_physical_device(&self) -> Result<&PhysicalDevice, EngineError> {
         todo!()
     }
-
 
     pub fn device_init(&mut self) -> Result<(), EngineError> {
         todo!()
