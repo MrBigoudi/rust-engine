@@ -8,6 +8,7 @@ pub mod device;
 pub mod entry;
 pub mod instance;
 pub mod surface;
+pub mod swapchain;
 
 impl VulkanRendererBackend<'_> {
     pub fn vulkan_init(
@@ -24,7 +25,7 @@ impl VulkanRendererBackend<'_> {
 
         self.surface_init(platform)?;
 
-        // self.physical_device_init()?;
+        self.physical_device_init()?;
         // self.device_init()?;
 
         Ok(())
@@ -32,7 +33,7 @@ impl VulkanRendererBackend<'_> {
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
         // self.device_shutdown()?;
-        // self.physical_device_shutdown()?;
+        self.physical_device_shutdown()?;
 
         self.surface_shutdown()?;
 

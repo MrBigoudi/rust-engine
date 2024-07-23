@@ -5,6 +5,9 @@ use ash::{
     Device, Entry, Instance,
 };
 
+use super::vulkan_init::device::PhysicalDeviceInfo;
+
+
 #[derive(Default)]
 pub(crate) struct VulkanContext<'a> {
     pub entry: Option<Entry>,
@@ -17,6 +20,7 @@ pub(crate) struct VulkanContext<'a> {
     pub surface_loader: Option<surface::Instance>,
     pub surface: Option<SurfaceKHR>,
 
+    pub physical_device_info: Option<PhysicalDeviceInfo>,
     pub physical_device: Option<PhysicalDevice>,
     pub device: Option<Device>,
 }

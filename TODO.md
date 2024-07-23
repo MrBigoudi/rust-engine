@@ -1,4 +1,4 @@
 # TODO list
 
-- init vulkan devices
+- init vulkan logical device
 - refactor application code (init subsystems,...)
