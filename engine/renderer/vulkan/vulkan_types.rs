@@ -5,8 +5,7 @@ use ash::{
     Device, Entry, Instance,
 };
 
-use super::vulkan_init::device::PhysicalDeviceInfo;
-
+use super::vulkan_init::physical_device::PhysicalDeviceInfo;
 
 #[derive(Default)]
 pub(crate) struct VulkanContext<'a> {
