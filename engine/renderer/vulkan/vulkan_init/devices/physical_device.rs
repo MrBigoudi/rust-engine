@@ -1,45 +1,17 @@
 use std::ffi::CStr;
 
 use ash::vk::{
-    api_version_major, api_version_minor, api_version_patch, PhysicalDevice,
-    PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties,
-    PhysicalDeviceType, QueueFlags,
+    api_version_major, api_version_minor, api_version_patch, ExtensionProperties, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, PhysicalDeviceType, QueueFlags
 };
 
 use crate::{
     core::debug::errors::EngineError, debug, error,
-    renderer::vulkan::vulkan_types::VulkanRendererBackend,
+    renderer::vulkan::{vulkan_init::swapchain::SwapChainSupportDetails, vulkan_types::VulkanRendererBackend, vulkan_utils::physical_device_features_to_vector},
 };
 
-use super::swapchain::SwapChainSupportDetails;
+use super::device_requirements::DeviceRequirements;
 
-struct PhysicalDeviceRequirements {
-    does_require_graphics_queue: bool,
-    does_require_present_queue: bool,
-    does_require_compute_queue: bool,
-    does_require_transfer_queue: bool,
-    does_require_sampler_anisotropy: bool,
-    is_discrete_gpu: bool,
-    device_extensions: Vec<*const i8>,
-}
 
-impl Default for PhysicalDeviceRequirements {
-    fn default() -> Self {
-        let mut device_extensions = Vec::new();
-        device_extensions
-            .push(unsafe { CStr::from_bytes_with_nul_unchecked(b"VK_KHR_swapchain\0").as_ptr() });
-
-        Self {
-            does_require_graphics_queue: true,
-            does_require_present_queue: true,
-            does_require_compute_queue: true,
-            does_require_transfer_queue: true,
-            does_require_sampler_anisotropy: true,
-            is_discrete_gpu: false,
-            device_extensions,
-        }
-    }
-}
 
 #[derive(Default, Debug)]
 pub(crate) struct PhysicalDeviceInfo {
@@ -47,9 +19,10 @@ pub(crate) struct PhysicalDeviceInfo {
     pub present_family_index: Option<usize>,
     pub compute_family_index: Option<usize>,
     pub transfer_family_index: Option<usize>,
-    pub properties: Option<PhysicalDeviceProperties>,
-    pub features: Option<PhysicalDeviceFeatures>,
-    pub memory_properties: Option<PhysicalDeviceMemoryProperties>,
+    pub properties: PhysicalDeviceProperties,
+    pub features: PhysicalDeviceFeatures,
+    pub extension_properties: Vec<ExtensionProperties>,
+    pub memory_properties: PhysicalDeviceMemoryProperties,
 }
 
 impl VulkanRendererBackend<'_> {
@@ -96,7 +69,7 @@ impl VulkanRendererBackend<'_> {
     }
 
     fn are_queue_families_requirements_fullfiled(
-        requirements: &PhysicalDeviceRequirements,
+        requirements: &DeviceRequirements,
         device_info: &PhysicalDeviceInfo,
     ) -> bool {
         !(requirements.does_require_graphics_queue && device_info.graphics_family_index.is_none()
@@ -125,26 +98,12 @@ impl VulkanRendererBackend<'_> {
 
     fn are_extensions_requirements_fullfiled(
         &self,
-        physical_device: &PhysicalDevice,
-        requirements: &PhysicalDeviceRequirements,
+        requirements: &DeviceRequirements,
+        physical_device_info: &PhysicalDeviceInfo
     ) -> Result<bool, EngineError> {
-        let extension_properties = match unsafe {
-            self.get_instance()?
-                .enumerate_device_extension_properties(*physical_device)
-        } {
-            Ok(properties) => properties,
-            Err(err) => {
-                error!(
-                    "Failed to enumerate the device extension properties: {:?}",
-                    err
-                );
-                return Err(EngineError::VulkanFailed);
-            }
-        };
-
-        'cur_extension: for required_extension in &requirements.device_extensions {
+        'cur_extension: for required_extension in &requirements.extensions {
             let required_extension_cstr = unsafe { CStr::from_ptr(*required_extension) };
-            for found_extension in &extension_properties {
+            for found_extension in &physical_device_info.extension_properties {
                 let found_extension_cstr =
                     unsafe { CStr::from_ptr(found_extension.extension_name.as_ptr()) };
                 if found_extension_cstr == required_extension_cstr {
@@ -153,15 +112,32 @@ impl VulkanRendererBackend<'_> {
             }
             return Ok(false);
         }
-
         Ok(true)
     }
 
-    fn is_device_suitable(
+    fn are_features_requirements_fullfiled(
         &self,
-        physical_device: &PhysicalDevice,
-        requirements: &PhysicalDeviceRequirements,
-    ) -> Result<(bool, Option<PhysicalDeviceInfo>), EngineError> {
+        requirements: &DeviceRequirements,
+        physical_device_info: &PhysicalDeviceInfo
+    ) -> Result<bool, EngineError> {
+        let physical_device_features = &physical_device_info.features;
+        let required_features_as_vec = physical_device_features_to_vector(&requirements.features);
+        let features_as_vec = physical_device_features_to_vector(physical_device_features);
+        if required_features_as_vec.len() != features_as_vec.len() {
+            error!("The required features and the physical device features are incompatible !");
+            return Err(EngineError::Unknown);
+        }
+        let nb_features = features_as_vec.len();
+        for feature in 0..nb_features {
+            if required_features_as_vec[feature].1 && !features_as_vec[feature].1 {
+                debug!("Device should support {:?}", required_features_as_vec[feature].0);
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
+    fn physical_device_info_init(&self, physical_device: &PhysicalDevice) -> Result<PhysicalDeviceInfo, EngineError> {
         let properties = unsafe {
             self.get_instance()?
                 .get_physical_device_properties(*physical_device)
@@ -174,31 +150,38 @@ impl VulkanRendererBackend<'_> {
             self.get_instance()?
                 .get_physical_device_memory_properties(*physical_device)
         };
-
-        // Discrete GPU ?
-        if requirements.is_discrete_gpu
-            && properties.device_type != PhysicalDeviceType::DISCRETE_GPU
-        {
-            debug!(
-                "Device should be a discrete GPU, found `{:?}' instead",
-                properties.device_type
-            );
-            return Ok((false, None));
-        }
-
-        // Anisotropy ?
-        if requirements.does_require_sampler_anisotropy && features.sampler_anisotropy == 0 {
-            debug!("Device should support sampler anisotropy");
-            return Ok((false, None));
-        }
-
-        let mut queue_families_info = PhysicalDeviceInfo {
-            properties: Some(properties),
-            features: Some(features),
-            memory_properties: Some(memory_properties),
-            ..Default::default()
+        let extension_properties = match unsafe {
+            self.get_instance()?
+                .enumerate_device_extension_properties(*physical_device)
+        } {
+            Ok(properties) => properties,
+            Err(err) => {
+                error!(
+                    "Failed to enumerate the physical device extension properties: {:?}",
+                    err
+                );
+                return Err(EngineError::VulkanFailed);
+            }
         };
 
+        Ok(PhysicalDeviceInfo {
+            properties,
+            features,
+            extension_properties,
+            memory_properties,
+            graphics_family_index: None,
+            present_family_index: None,
+            compute_family_index: None,
+            transfer_family_index: None,
+        })
+    }
+
+    /// Modify the physical device info
+    fn queue_family_properties_init(
+        &self, 
+        physical_device: &PhysicalDevice, 
+        physical_device_info: &mut PhysicalDeviceInfo
+    ) -> Result<(), EngineError> {
         let queue_family_properties = unsafe {
             self.get_instance()?
                 .get_physical_device_queue_family_properties(*physical_device)
@@ -210,13 +193,13 @@ impl VulkanRendererBackend<'_> {
 
             // Graphics queue ?
             if queue_family.queue_flags.contains(QueueFlags::GRAPHICS) {
-                queue_families_info.graphics_family_index = Some(index);
+                physical_device_info.graphics_family_index = Some(index);
                 transfer_score += 1;
             }
 
             // Compute queue ?
             if queue_family.queue_flags.contains(QueueFlags::COMPUTE) {
-                queue_families_info.compute_family_index = Some(index);
+                physical_device_info.compute_family_index = Some(index);
                 transfer_score += 1;
             }
 
@@ -226,7 +209,7 @@ impl VulkanRendererBackend<'_> {
                 // likelihood that it is a dedicated transfer queue.
                 if transfer_score <= min_transfer_score {
                     min_transfer_score = transfer_score;
-                    queue_families_info.transfer_family_index = Some(index);
+                    physical_device_info.transfer_family_index = Some(index);
                 }
             }
 
@@ -240,7 +223,7 @@ impl VulkanRendererBackend<'_> {
                     )
             } {
                 Ok(false) => (),
-                Ok(true) => queue_families_info.present_family_index = Some(index),
+                Ok(true) => physical_device_info.present_family_index = Some(index),
                 Err(err) => {
                     error!(
                         "Failed to fetch the physical device surface support: {:?}",
@@ -250,74 +233,95 @@ impl VulkanRendererBackend<'_> {
                 }
             }
         }
+        Ok(())
+    }
+
+    fn is_device_suitable(
+        &self,
+        physical_device: &PhysicalDevice,
+        requirements: &DeviceRequirements,
+    ) -> Result<(bool, Option<PhysicalDeviceInfo>), EngineError> {
+        let mut physical_device_info = self.physical_device_info_init(physical_device)?;
+        self.queue_family_properties_init(physical_device, &mut physical_device_info)?;
+
+        // Discrete GPU ?
+        if requirements.is_discrete_gpu
+            && physical_device_info.properties.device_type != PhysicalDeviceType::DISCRETE_GPU
+        {
+            debug!(
+                "Device should be a discrete GPU, found `{:?}' instead",
+                physical_device_info.properties.device_type
+            );
+            return Ok((false, None));
+        }
 
         let are_queue_families_requirements_fullfiled =
-            Self::are_queue_families_requirements_fullfiled(requirements, &queue_families_info);
+            Self::are_queue_families_requirements_fullfiled(requirements, &physical_device_info);
         let are_swapchain_requirements_fullfiled =
             self.are_swapchain_requirements_fullfiled(physical_device)?;
         let are_extensions_requirements_fullfiled =
-            self.are_extensions_requirements_fullfiled(physical_device, requirements)?;
+            self.are_extensions_requirements_fullfiled(requirements, &physical_device_info)?;
+        let are_features_requirements_fullfiled =
+            self.are_features_requirements_fullfiled(requirements, &physical_device_info)?;
 
         let is_device_suitable = are_queue_families_requirements_fullfiled
             && are_swapchain_requirements_fullfiled
-            && are_extensions_requirements_fullfiled;
+            && are_extensions_requirements_fullfiled
+            && are_features_requirements_fullfiled;
 
-        Ok((is_device_suitable, Some(queue_families_info)))
+        Ok((is_device_suitable, Some(physical_device_info)))
     }
 
     fn display_physical_device(physical_device: &PhysicalDevice, device_info: &PhysicalDeviceInfo) {
-        if let Some(properties) = &device_info.properties {
-            // Convert the device name array to a raw pointer
-            let name_ptr = properties.device_name.as_ptr();
-            let name = unsafe { CStr::from_ptr(name_ptr) };
-            debug!("\tSelected device: {:?}", name);
+        // Convert the device name array to a raw pointer
+        let name_ptr = device_info.properties.device_name.as_ptr();
+        let name = unsafe { CStr::from_ptr(name_ptr) };
+        debug!("\tSelected device: {:?}", name);
 
-            // GPU type, etc.
-            match properties.device_type {
-                PhysicalDeviceType::CPU => debug!("\tGPU type is CPU"),
-                PhysicalDeviceType::DISCRETE_GPU => debug!("\tGPU type is discrete"),
-                PhysicalDeviceType::INTEGRATED_GPU => debug!("\tGPU type is integrated"),
-                PhysicalDeviceType::OTHER => debug!("\tGPU type is unknown"),
-                PhysicalDeviceType::VIRTUAL_GPU => debug!("\tGPU type is virtual"),
-                _ => (),
-            }
-
-            debug!(
-                "\tGPU Driver version: {:?}.{:?}.{:?}",
-                api_version_major(properties.driver_version),
-                api_version_minor(properties.driver_version),
-                api_version_patch(properties.driver_version),
-            );
-
-            debug!(
-                "\tVulkan API version: {:?}.{:?}.{:?}\n\n",
-                api_version_major(properties.api_version),
-                api_version_minor(properties.api_version),
-                api_version_patch(properties.api_version),
-            );
+        // GPU type, etc.
+        match device_info.properties.device_type {
+            PhysicalDeviceType::CPU => debug!("\tGPU type is CPU"),
+            PhysicalDeviceType::DISCRETE_GPU => debug!("\tGPU type is discrete"),
+            PhysicalDeviceType::INTEGRATED_GPU => debug!("\tGPU type is integrated"),
+            PhysicalDeviceType::OTHER => debug!("\tGPU type is unknown"),
+            PhysicalDeviceType::VIRTUAL_GPU => debug!("\tGPU type is virtual"),
+            _ => (),
         }
+
+        debug!(
+            "\tGPU Driver version: {:?}.{:?}.{:?}",
+            api_version_major(device_info.properties.driver_version),
+            api_version_minor(device_info.properties.driver_version),
+            api_version_patch(device_info.properties.driver_version),
+        );
+
+        debug!(
+            "\tVulkan API version: {:?}.{:?}.{:?}\n\n",
+            api_version_major(device_info.properties.api_version),
+            api_version_minor(device_info.properties.api_version),
+            api_version_patch(device_info.properties.api_version),
+        );
     }
 
     pub fn physical_device_init(&mut self) -> Result<(), EngineError> {
         let physical_devices = self.enumerate_physical_devices()?;
 
-        // TODO: make this configurable
-        let requirements = PhysicalDeviceRequirements::default();
+        let requirements = self.get_device_requirements()?;
 
         for physical_device in physical_devices {
             let (is_suitable, device_info) =
-                match self.is_device_suitable(&physical_device, &requirements) {
+                match self.is_device_suitable(&physical_device, requirements) {
                     Ok((true, Some(info))) => (true, info),
                     Ok((false, _)) => (false, PhysicalDeviceInfo::default()),
                     Err(err) => {
                         error!(
-                            "Faile to get the suitability of the current physical device: {:?}",
+                            "Failed to get the suitability of the current physical device: {:?}",
                             err
                         );
                         return Err(EngineError::VulkanFailed);
                     }
                     _ => {
-                        error!("Faile to get the suitability of the current physical device");
+                        error!("Failed to get the suitability of the current physical device");
                         return Err(EngineError::Unknown);
                     }
                 };
@@ -344,6 +348,16 @@ impl VulkanRendererBackend<'_> {
             Some(device) => Ok(device),
             None => {
                 error!("Can't access the vulkan physical device");
+                Err(EngineError::AccessFailed)
+            }
+        }
+    }
+
+    pub fn get_physical_device_info(&self) -> Result<&PhysicalDeviceInfo, EngineError> {
+        match &self.context.physical_device_info {
+            Some(device_info) => Ok(device_info),
+            None => {
+                error!("Can't access the vulkan physical device info");
                 Err(EngineError::AccessFailed)
             }
         }
