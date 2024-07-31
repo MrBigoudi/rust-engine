@@ -22,16 +22,11 @@ impl VulkanRendererBackend<'_> {
         
         let mut queue_create_infos: Vec<DeviceQueueCreateInfo> = Vec::new();
         for queue_index in queue_indices {
-            let mut queue_create_info = DeviceQueueCreateInfo::default()
+            let queue_create_info = DeviceQueueCreateInfo::default()
                 .queue_family_index(queue_index as u32)
+                // TODO: change the queue priorities
+                .queue_priorities(&[1.])
             ;
-            // two queues for the graphics family, one for the other
-            // TODO: change the queue priorities
-            if queue_index == physical_device_info.graphics_family_index.unwrap() {
-                queue_create_info = queue_create_info.queue_priorities(&[1., 1.]) 
-            } else {
-                queue_create_info = queue_create_info.queue_priorities(&[1.])
-            }
             queue_create_infos.push(queue_create_info);
         } 
 
@@ -49,18 +44,38 @@ impl VulkanRendererBackend<'_> {
             },
         };
 
-        let device_features = physical_device_info.features;
+        let requirements = self.get_device_requirements()?;
 
         let device_create_info = DeviceCreateInfo::default()
             .queue_create_infos(queue_create_infos.as_slice())
-            .enabled_features(&physical_device_info.features)
+            .enabled_features(&requirements.features)
+            .enabled_extension_names(requirements.extensions.as_slice())
         ;
 
-        todo!()
+        unsafe {
+            match
+            self.get_instance()?
+                .create_device(
+                    *self.get_physical_device()?, 
+                    &device_create_info, 
+                    self.get_allocator()?
+                ) {
+                Ok(device) => self.context.device = Some(device),
+                Err(err) => {
+                    error!("Failed to initialize the vulkan logical device: {:?}", err);
+                    return Err(EngineError::VulkanFailed);
+                } 
+            }
+        }
+
+        Ok(())
     }
 
     pub fn device_shutdown(&mut self) -> Result<(), EngineError> {
-        todo!()
+        unsafe {
+            self.get_device()?.destroy_device(self.get_allocator()?);
+        }
+        Ok(())
     }
 
     pub fn get_device(&self) -> Result<&Device, EngineError> {

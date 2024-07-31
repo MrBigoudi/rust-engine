@@ -16,9 +16,13 @@ use super::device_requirements::DeviceRequirements;
 #[derive(Default, Debug)]
 pub(crate) struct PhysicalDeviceInfo {
     pub graphics_family_index: Option<usize>,
+    pub graphics_family_queue_count: Option<u32>,
     pub present_family_index: Option<usize>,
+    pub present_family_queue_count: Option<u32>,
     pub compute_family_index: Option<usize>,
+    pub compute_family_queue_count: Option<u32>,
     pub transfer_family_index: Option<usize>,
+    pub transfer_family_queue_count: Option<u32>,
     pub properties: PhysicalDeviceProperties,
     pub features: PhysicalDeviceFeatures,
     pub extension_properties: Vec<ExtensionProperties>,
@@ -170,9 +174,13 @@ impl VulkanRendererBackend<'_> {
             extension_properties,
             memory_properties,
             graphics_family_index: None,
+            graphics_family_queue_count: None,
             present_family_index: None,
+            present_family_queue_count: None,
             compute_family_index: None,
+            compute_family_queue_count: None,
             transfer_family_index: None,
+            transfer_family_queue_count: None,
         })
     }
 
@@ -194,12 +202,14 @@ impl VulkanRendererBackend<'_> {
             // Graphics queue ?
             if queue_family.queue_flags.contains(QueueFlags::GRAPHICS) {
                 physical_device_info.graphics_family_index = Some(index);
+                physical_device_info.graphics_family_queue_count = Some(queue_family.queue_count);
                 transfer_score += 1;
             }
 
             // Compute queue ?
             if queue_family.queue_flags.contains(QueueFlags::COMPUTE) {
                 physical_device_info.compute_family_index = Some(index);
+                physical_device_info.compute_family_queue_count = Some(queue_family.queue_count);
                 transfer_score += 1;
             }
 
@@ -210,6 +220,7 @@ impl VulkanRendererBackend<'_> {
                 if transfer_score <= min_transfer_score {
                     min_transfer_score = transfer_score;
                     physical_device_info.transfer_family_index = Some(index);
+                    physical_device_info.transfer_family_queue_count = Some(queue_family.queue_count);
                 }
             }
 
@@ -223,7 +234,10 @@ impl VulkanRendererBackend<'_> {
                     )
             } {
                 Ok(false) => (),
-                Ok(true) => physical_device_info.present_family_index = Some(index),
+                Ok(true) => {
+                    physical_device_info.present_family_index = Some(index);
+                    physical_device_info.present_family_queue_count = Some(queue_family.queue_count);
+                },
                 Err(err) => {
                     error!(
                         "Failed to fetch the physical device surface support: {:?}",
