@@ -133,6 +133,5 @@ pub(crate) fn logger_init() -> Result<(), EngineError> {
 
 /// Shutdown the engine logger
 pub(crate) fn logger_shutdown() -> Result<(), EngineError> {
-    // TODO:
     Ok(())
 }

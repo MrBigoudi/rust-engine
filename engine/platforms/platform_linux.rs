@@ -128,7 +128,7 @@ impl Platform for PlatformLinux {
         };
 
         if !resizable {
-            // TODO:
+            // TODO: Implement window resizing
         }
 
         // We now show ("map" in X terminology) the window.
@@ -358,7 +358,7 @@ impl Platform for PlatformLinux {
 
                                 // Resizing
                                 xcb::x::Event::ConfigureNotify(_) => {
-                                    continue 'infinite_loop; //TODO:
+                                    continue 'infinite_loop; //TODO: implement window resizing
                                 }
 
                                 xcb::x::Event::ClientMessage(client_message_event) => {

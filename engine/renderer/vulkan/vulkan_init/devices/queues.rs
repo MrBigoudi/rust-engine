@@ -1,6 +1,8 @@
 use ash::vk::{PhysicalDevice, Queue, QueueFlags};
 
-use crate::{core::debug::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend};
+use crate::{
+    core::debug::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend,
+};
 
 #[derive(Debug, Default)]
 pub(crate) struct Queues {
@@ -23,7 +25,7 @@ pub(crate) struct Queues {
 
 impl VulkanRendererBackend<'_> {
     pub(crate) fn queue_family_properties_create(
-        &self, 
+        &self,
         physical_device: &PhysicalDevice,
     ) -> Result<Queues, EngineError> {
         let queue_family_properties = unsafe {
@@ -75,7 +77,7 @@ impl VulkanRendererBackend<'_> {
                 Ok(true) => {
                     queues.present_family_index = Some(index);
                     queues.present_family_queue_count = Some(queue_family.queue_count);
-                },
+                }
                 Err(err) => {
                     error!(
                         "Failed to fetch the physical device surface support: {:?}",
@@ -96,18 +98,22 @@ impl VulkanRendererBackend<'_> {
         let transfer_queue;
 
         unsafe {
-            graphics_queue = device.get_device_queue(self.get_queues()?.graphics_family_index.unwrap() as u32, 0);
-            present_queue = device.get_device_queue(self.get_queues()?.present_family_index.unwrap() as u32, 0);
-            compute_queue = device.get_device_queue(self.get_queues()?.compute_family_index.unwrap() as u32, 0);
-            transfer_queue = device.get_device_queue(self.get_queues()?.transfer_family_index.unwrap() as u32, 0);
+            graphics_queue = device
+                .get_device_queue(self.get_queues()?.graphics_family_index.unwrap() as u32, 0);
+            present_queue =
+                device.get_device_queue(self.get_queues()?.present_family_index.unwrap() as u32, 0);
+            compute_queue =
+                device.get_device_queue(self.get_queues()?.compute_family_index.unwrap() as u32, 0);
+            transfer_queue = device
+                .get_device_queue(self.get_queues()?.transfer_family_index.unwrap() as u32, 0);
         }
-        
+
         let physical_device_info = self.context.physical_device_info.as_mut().unwrap();
         physical_device_info.queues.graphics_queue = Some(graphics_queue);
         physical_device_info.queues.present_queue = Some(present_queue);
         physical_device_info.queues.compute_queue = Some(compute_queue);
         physical_device_info.queues.transfer_queue = Some(transfer_queue);
-        
+
         Ok(())
     }
 

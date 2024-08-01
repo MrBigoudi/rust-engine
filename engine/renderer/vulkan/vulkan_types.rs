@@ -5,7 +5,10 @@ use ash::{
     Device, Entry, Instance,
 };
 
-use super::vulkan_init::devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo};
+use super::vulkan_init::{
+    devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
+    swapchain::Swapchain,
+};
 
 #[derive(Default)]
 pub(crate) struct VulkanContext<'a> {
@@ -23,10 +26,18 @@ pub(crate) struct VulkanContext<'a> {
     pub physical_device_info: Option<PhysicalDeviceInfo>,
     pub physical_device: Option<PhysicalDevice>,
     pub device: Option<Device>,
+
+    pub swapchain: Option<Swapchain>,
+    pub image_index: u32,
+    pub current_frame: u32,
+    pub should_recreate_swapchain: bool,
 }
 
 #[derive(Default)]
 pub(crate) struct VulkanRendererBackend<'a> {
     pub context: VulkanContext<'a>,
+
     pub frame_number: u64,
+    pub framebuffer_width: u32,
+    pub framebuffer_height: u32,
 }

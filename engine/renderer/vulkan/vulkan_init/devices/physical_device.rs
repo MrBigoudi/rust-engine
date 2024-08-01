@@ -1,17 +1,21 @@
 use std::ffi::CStr;
 
 use ash::vk::{
-    api_version_major, api_version_minor, api_version_patch, ExtensionProperties, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, PhysicalDeviceType
+    api_version_major, api_version_minor, api_version_patch, ExtensionProperties, Format,
+    FormatFeatureFlags, MemoryPropertyFlags, PhysicalDevice, PhysicalDeviceFeatures,
+    PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, PhysicalDeviceType,
 };
 
 use crate::{
-    core::debug::errors::EngineError, debug, error,
-    renderer::vulkan::{vulkan_init::swapchain::SwapChainSupportDetails, vulkan_types::VulkanRendererBackend, vulkan_utils::physical_device_features_to_vector},
+    core::debug::errors::EngineError,
+    debug, error,
+    renderer::vulkan::{
+        vulkan_init::swapchain::SwapchainSupportDetails, vulkan_types::VulkanRendererBackend,
+        vulkan_utils::device_features::physical_device_features_to_vector,
+    },
 };
 
 use super::{device_requirements::DeviceRequirements, queues::Queues};
-
-
 
 #[derive(Default, Debug)]
 pub(crate) struct PhysicalDeviceInfo {
@@ -20,6 +24,8 @@ pub(crate) struct PhysicalDeviceInfo {
     pub features: PhysicalDeviceFeatures,
     pub extension_properties: Vec<ExtensionProperties>,
     pub memory_properties: PhysicalDeviceMemoryProperties,
+    pub swapchain_support_details: SwapchainSupportDetails,
+    pub depth_format: Option<Format>,
 }
 
 impl VulkanRendererBackend<'_> {
@@ -36,40 +42,12 @@ impl VulkanRendererBackend<'_> {
         }
     }
 
-    fn query_swapchain_support(
-        &self,
-        physical_device: &PhysicalDevice,
-    ) -> Result<SwapChainSupportDetails, EngineError> {
-        let surface_capabilities = unsafe {
-            self.get_surface_loader()?
-                .get_physical_device_surface_capabilities(*physical_device, *(self.get_surface()?))
-                .unwrap()
-        };
-
-        let surface_format = unsafe {
-            self.get_surface_loader()?
-                .get_physical_device_surface_formats(*physical_device, *(self.get_surface()?))
-                .unwrap()
-        };
-
-        let surface_present_modes = unsafe {
-            self.get_surface_loader()?
-                .get_physical_device_surface_present_modes(*physical_device, *(self.get_surface()?))
-                .unwrap()
-        };
-
-        Ok(SwapChainSupportDetails {
-            capabilities: surface_capabilities,
-            formats: surface_format,
-            present_modes: surface_present_modes,
-        })
-    }
-
     fn are_queue_families_requirements_fullfiled(
         requirements: &DeviceRequirements,
         device_info: &PhysicalDeviceInfo,
     ) -> bool {
-        !(requirements.does_require_graphics_queue && device_info.queues.graphics_family_index.is_none()
+        !(requirements.does_require_graphics_queue
+            && device_info.queues.graphics_family_index.is_none()
             || requirements.does_require_present_queue
                 && device_info.queues.present_family_index.is_none()
             || requirements.does_require_compute_queue
@@ -80,23 +58,15 @@ impl VulkanRendererBackend<'_> {
 
     fn are_swapchain_requirements_fullfiled(
         &self,
-        physical_device: &PhysicalDevice,
+        physical_device_info: &PhysicalDeviceInfo,
     ) -> Result<bool, EngineError> {
-        let swapchain_supprt_details = match self.query_swapchain_support(physical_device) {
-            Ok(details) => details,
-            Err(err) => {
-                error!("Failed to query the swapchain support details: {:?}", err);
-                return Err(EngineError::VulkanFailed);
-            }
-        };
-
-        Ok(swapchain_supprt_details.is_complete())
+        Ok(physical_device_info.swapchain_support_details.is_complete())
     }
 
     fn are_extensions_requirements_fullfiled(
         &self,
         requirements: &DeviceRequirements,
-        physical_device_info: &PhysicalDeviceInfo
+        physical_device_info: &PhysicalDeviceInfo,
     ) -> Result<bool, EngineError> {
         'cur_extension: for required_extension in &requirements.extensions {
             let required_extension_cstr = unsafe { CStr::from_ptr(*required_extension) };
@@ -115,7 +85,7 @@ impl VulkanRendererBackend<'_> {
     fn are_features_requirements_fullfiled(
         &self,
         requirements: &DeviceRequirements,
-        physical_device_info: &PhysicalDeviceInfo
+        physical_device_info: &PhysicalDeviceInfo,
     ) -> Result<bool, EngineError> {
         let physical_device_features = &physical_device_info.features;
         let required_features_as_vec = physical_device_features_to_vector(&requirements.features);
@@ -127,14 +97,20 @@ impl VulkanRendererBackend<'_> {
         let nb_features = features_as_vec.len();
         for feature in 0..nb_features {
             if required_features_as_vec[feature].1 && !features_as_vec[feature].1 {
-                debug!("Device should support {:?}", required_features_as_vec[feature].0);
+                debug!(
+                    "Device should support {:?}",
+                    required_features_as_vec[feature].0
+                );
                 return Ok(false);
             }
         }
         Ok(true)
     }
 
-    fn physical_device_info_init(&self, physical_device: &PhysicalDevice) -> Result<PhysicalDeviceInfo, EngineError> {
+    fn physical_device_info_init(
+        &self,
+        physical_device: &PhysicalDevice,
+    ) -> Result<PhysicalDeviceInfo, EngineError> {
         let properties = unsafe {
             self.get_instance()?
                 .get_physical_device_properties(*physical_device)
@@ -167,9 +143,10 @@ impl VulkanRendererBackend<'_> {
             extension_properties,
             memory_properties,
             queues: Queues::default(),
+            swapchain_support_details: SwapchainSupportDetails::default(),
+            depth_format: None,
         })
     }
-
 
     fn is_device_suitable(
         &self,
@@ -178,6 +155,8 @@ impl VulkanRendererBackend<'_> {
     ) -> Result<(bool, Option<PhysicalDeviceInfo>), EngineError> {
         let mut physical_device_info = self.physical_device_info_init(physical_device)?;
         physical_device_info.queues = self.queue_family_properties_create(physical_device)?;
+        physical_device_info.swapchain_support_details =
+            self.query_swapchain_support(physical_device)?;
 
         // Discrete GPU ?
         if requirements.is_discrete_gpu
@@ -193,7 +172,7 @@ impl VulkanRendererBackend<'_> {
         let are_queue_families_requirements_fullfiled =
             Self::are_queue_families_requirements_fullfiled(requirements, &physical_device_info);
         let are_swapchain_requirements_fullfiled =
-            self.are_swapchain_requirements_fullfiled(physical_device)?;
+            self.are_swapchain_requirements_fullfiled(&physical_device_info)?;
         let are_extensions_requirements_fullfiled =
             self.are_extensions_requirements_fullfiled(requirements, &physical_device_info)?;
         let are_features_requirements_fullfiled =
@@ -298,5 +277,58 @@ impl VulkanRendererBackend<'_> {
                 Err(EngineError::AccessFailed)
             }
         }
+    }
+
+    pub(crate) fn device_find_memory_index(
+        &self,
+        type_filter: u32,
+        property_flags: MemoryPropertyFlags,
+    ) -> Result<u32, EngineError> {
+        let memory_properties = unsafe {
+            let instance = self.get_instance()?;
+            instance.get_physical_device_memory_properties(*self.get_physical_device()?)
+        };
+
+        for (index, memory_type) in memory_properties.memory_types.iter().enumerate() {
+            if (type_filter & (1 << index) != 0)
+                && memory_type.property_flags.intersects(property_flags)
+            {
+                return Ok(index as u32);
+            }
+        }
+
+        error!("Unable to find suitable vulkan memory type");
+        Err(EngineError::VulkanFailed)
+    }
+
+    pub(crate) fn device_detect_depth_format(&mut self) -> Result<(), EngineError> {
+        // Format candidates
+        let candidates = [
+            Format::D32_SFLOAT,
+            Format::D32_SFLOAT_S8_UINT,
+            Format::D24_UNORM_S8_UINT,
+        ];
+        let flags = FormatFeatureFlags::DEPTH_STENCIL_ATTACHMENT;
+        let physical_device = self.context.physical_device.as_ref().unwrap();
+
+        for candidate in candidates {
+            let format_properties = unsafe {
+                self.get_instance()?
+                    .get_physical_device_format_properties(*physical_device, candidate)
+            };
+            if format_properties.linear_tiling_features.intersects(flags) {
+                let device_info = self.context.physical_device_info.as_mut().unwrap();
+                device_info.depth_format = Some(candidate);
+                return Ok(());
+            }
+            if format_properties.optimal_tiling_features.intersects(flags) {
+                let device_info = self.context.physical_device_info.as_mut().unwrap();
+                device_info.depth_format = Some(candidate);
+                return Ok(());
+            }
+        }
+
+        error!("Failed to detect the vulkan physical device depth forma");
+        Err(EngineError::VulkanFailed)
     }
 }
