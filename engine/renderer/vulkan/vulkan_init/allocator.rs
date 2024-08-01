@@ -4,11 +4,13 @@ use crate::{
 
 impl VulkanRendererBackend<'_> {
     pub fn allocator_init(&mut self) -> Result<(), EngineError> {
+        // TODO: build an allocator
         self.context.allocator = None;
         Ok(())
     }
 
     pub fn allocator_shutdown(&mut self) -> Result<(), EngineError> {
+        self.context.allocator = None;
         Ok(())
     }
 }

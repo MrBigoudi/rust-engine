@@ -30,6 +30,7 @@ impl VulkanRendererBackend<'_> {
     }
 
     pub fn entry_shutdown(&mut self) -> Result<(), EngineError> {
+        self.context.entry = None;
         Ok(())
     }
 }

@@ -45,6 +45,7 @@ impl VulkanRendererBackend<'_> {
     }
 
     pub fn device_requirements_shutdown(&mut self) -> Result<(), EngineError> {
+        self.context.device_requirements = None;
         Ok(())
     }
 

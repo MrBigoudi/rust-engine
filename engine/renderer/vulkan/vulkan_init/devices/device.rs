@@ -4,20 +4,18 @@ use crate::{
     core::debug::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend,
 };
 
-use super::physical_device::PhysicalDeviceInfo;
-
 impl VulkanRendererBackend<'_> {
-    fn get_queue_create_infos(&self, physical_device_info: &PhysicalDeviceInfo) -> Result<Vec<DeviceQueueCreateInfo>, EngineError> {
+    fn get_device_queue_create_infos(&self) -> Result<Vec<DeviceQueueCreateInfo>, EngineError> {
         // NOTE: do not create additional queues for shared indices
-        let present_shares_graphics_queue = physical_device_info.graphics_family_index == physical_device_info.present_family_index;
-        let transfer_shares_graphics_queue = physical_device_info.graphics_family_index == physical_device_info.transfer_family_index;
+        let present_shares_graphics_queue = self.get_queues()?.graphics_family_index == self.get_queues()?.present_family_index;
+        let transfer_shares_graphics_queue = self.get_queues()?.graphics_family_index == self.get_queues()?.transfer_family_index;
 
-        let mut queue_indices= vec![physical_device_info.graphics_family_index.unwrap()];
+        let mut queue_indices= vec![self.get_queues()?.graphics_family_index.unwrap()];
         if !present_shares_graphics_queue {
-            queue_indices.push(physical_device_info.present_family_index.unwrap());
+            queue_indices.push(self.get_queues()?.present_family_index.unwrap());
         }
         if !transfer_shares_graphics_queue {
-            queue_indices.push(physical_device_info.transfer_family_index.unwrap());
+            queue_indices.push(self.get_queues()?.transfer_family_index.unwrap());
         }
         
         let mut queue_create_infos: Vec<DeviceQueueCreateInfo> = Vec::new();
@@ -33,10 +31,11 @@ impl VulkanRendererBackend<'_> {
         Ok(queue_create_infos)
     }
 
+
     pub fn device_init(&mut self) -> Result<(), EngineError> {
         let physical_device_info = self.get_physical_device_info()?;
 
-        let queue_create_infos = match self.get_queue_create_infos(physical_device_info) {
+        let queue_create_infos = match self.get_device_queue_create_infos() {
             Ok(infos) => infos,
             Err(err) => {
                 error!("Failed to create the device queue infos: {:?}", err);
@@ -75,6 +74,7 @@ impl VulkanRendererBackend<'_> {
         unsafe {
             self.get_device()?.destroy_device(self.get_allocator()?);
         }
+        self.context.device = None;
         Ok(())
     }
 

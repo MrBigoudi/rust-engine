@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use ash::vk::{
-    api_version_major, api_version_minor, api_version_patch, ExtensionProperties, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, PhysicalDeviceType, QueueFlags
+    api_version_major, api_version_minor, api_version_patch, ExtensionProperties, PhysicalDevice, PhysicalDeviceFeatures, PhysicalDeviceMemoryProperties, PhysicalDeviceProperties, PhysicalDeviceType
 };
 
 use crate::{
@@ -9,20 +9,13 @@ use crate::{
     renderer::vulkan::{vulkan_init::swapchain::SwapChainSupportDetails, vulkan_types::VulkanRendererBackend, vulkan_utils::physical_device_features_to_vector},
 };
 
-use super::device_requirements::DeviceRequirements;
+use super::{device_requirements::DeviceRequirements, queues::Queues};
 
 
 
 #[derive(Default, Debug)]
 pub(crate) struct PhysicalDeviceInfo {
-    pub graphics_family_index: Option<usize>,
-    pub graphics_family_queue_count: Option<u32>,
-    pub present_family_index: Option<usize>,
-    pub present_family_queue_count: Option<u32>,
-    pub compute_family_index: Option<usize>,
-    pub compute_family_queue_count: Option<u32>,
-    pub transfer_family_index: Option<usize>,
-    pub transfer_family_queue_count: Option<u32>,
+    pub queues: Queues,
     pub properties: PhysicalDeviceProperties,
     pub features: PhysicalDeviceFeatures,
     pub extension_properties: Vec<ExtensionProperties>,
@@ -76,13 +69,13 @@ impl VulkanRendererBackend<'_> {
         requirements: &DeviceRequirements,
         device_info: &PhysicalDeviceInfo,
     ) -> bool {
-        !(requirements.does_require_graphics_queue && device_info.graphics_family_index.is_none()
+        !(requirements.does_require_graphics_queue && device_info.queues.graphics_family_index.is_none()
             || requirements.does_require_present_queue
-                && device_info.present_family_index.is_none()
+                && device_info.queues.present_family_index.is_none()
             || requirements.does_require_compute_queue
-                && device_info.graphics_family_index.is_none()
+                && device_info.queues.graphics_family_index.is_none()
             || requirements.does_require_transfer_queue
-                && device_info.graphics_family_index.is_none())
+                && device_info.queues.graphics_family_index.is_none())
     }
 
     fn are_swapchain_requirements_fullfiled(
@@ -173,82 +166,10 @@ impl VulkanRendererBackend<'_> {
             features,
             extension_properties,
             memory_properties,
-            graphics_family_index: None,
-            graphics_family_queue_count: None,
-            present_family_index: None,
-            present_family_queue_count: None,
-            compute_family_index: None,
-            compute_family_queue_count: None,
-            transfer_family_index: None,
-            transfer_family_queue_count: None,
+            queues: Queues::default(),
         })
     }
 
-    /// Modify the physical device info
-    fn queue_family_properties_init(
-        &self, 
-        physical_device: &PhysicalDevice, 
-        physical_device_info: &mut PhysicalDeviceInfo
-    ) -> Result<(), EngineError> {
-        let queue_family_properties = unsafe {
-            self.get_instance()?
-                .get_physical_device_queue_family_properties(*physical_device)
-        };
-
-        let mut min_transfer_score = u32::MAX;
-        for (index, queue_family) in queue_family_properties.iter().enumerate() {
-            let mut transfer_score = 0;
-
-            // Graphics queue ?
-            if queue_family.queue_flags.contains(QueueFlags::GRAPHICS) {
-                physical_device_info.graphics_family_index = Some(index);
-                physical_device_info.graphics_family_queue_count = Some(queue_family.queue_count);
-                transfer_score += 1;
-            }
-
-            // Compute queue ?
-            if queue_family.queue_flags.contains(QueueFlags::COMPUTE) {
-                physical_device_info.compute_family_index = Some(index);
-                physical_device_info.compute_family_queue_count = Some(queue_family.queue_count);
-                transfer_score += 1;
-            }
-
-            // Transfer queue ?
-            if queue_family.queue_flags.contains(QueueFlags::TRANSFER) {
-                // Take the index if it is the current lowest. This increases the
-                // likelihood that it is a dedicated transfer queue.
-                if transfer_score <= min_transfer_score {
-                    min_transfer_score = transfer_score;
-                    physical_device_info.transfer_family_index = Some(index);
-                    physical_device_info.transfer_family_queue_count = Some(queue_family.queue_count);
-                }
-            }
-
-            // Present queue ?
-            match unsafe {
-                self.get_surface_loader()?
-                    .get_physical_device_surface_support(
-                        *physical_device,
-                        index as u32,
-                        *self.get_surface()?,
-                    )
-            } {
-                Ok(false) => (),
-                Ok(true) => {
-                    physical_device_info.present_family_index = Some(index);
-                    physical_device_info.present_family_queue_count = Some(queue_family.queue_count);
-                },
-                Err(err) => {
-                    error!(
-                        "Failed to fetch the physical device surface support: {:?}",
-                        err
-                    );
-                    return Err(EngineError::VulkanFailed);
-                }
-            }
-        }
-        Ok(())
-    }
 
     fn is_device_suitable(
         &self,
@@ -256,7 +177,7 @@ impl VulkanRendererBackend<'_> {
         requirements: &DeviceRequirements,
     ) -> Result<(bool, Option<PhysicalDeviceInfo>), EngineError> {
         let mut physical_device_info = self.physical_device_info_init(physical_device)?;
-        self.queue_family_properties_init(physical_device, &mut physical_device_info)?;
+        physical_device_info.queues = self.queue_family_properties_create(physical_device)?;
 
         // Discrete GPU ?
         if requirements.is_discrete_gpu
@@ -354,6 +275,8 @@ impl VulkanRendererBackend<'_> {
     }
 
     pub fn physical_device_shutdown(&mut self) -> Result<(), EngineError> {
+        self.context.physical_device_info = None;
+        self.context.physical_device = None;
         Ok(())
     }
 

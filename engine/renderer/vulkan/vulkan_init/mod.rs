@@ -79,12 +79,25 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan logical device initialized successfully !");
         }
 
+        if let Err(err) = self.queues_init(){
+            error!("Failed to initialize the vulkan logical device queues: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan logical device queues initialized successfully !");
+        }
+
         Ok(())
     }
 
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
-        // self.device_shutdown()?;
+        if let Err(err) = self.queues_shutdown(){
+            error!("Failed to shutdown the vulkan logical device queues: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan logical device queues shutdowned successfully !");
+        }
+
         if let Err(err) = self.device_shutdown(){
             error!("Failed to shutdown the vulkan logical device: {:?}", err);
             return Err(EngineError::ShutdownFailed);

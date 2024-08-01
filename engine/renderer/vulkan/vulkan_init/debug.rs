@@ -107,6 +107,8 @@ impl VulkanRendererBackend<'_> {
             self.get_debug_loader()?
                 .destroy_debug_utils_messenger(*self.get_debug_callback()?, self.get_allocator()?);
         }
+        self.context.debug_callback = None;
+        self.context.debug_utils_loader = None;
         Ok(())
     }
 }

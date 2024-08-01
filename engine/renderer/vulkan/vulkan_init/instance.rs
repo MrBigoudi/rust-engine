@@ -143,6 +143,7 @@ impl VulkanRendererBackend<'_> {
         unsafe {
             self.get_instance()?.destroy_instance(self.get_allocator()?);
         }
+        self.context.instance = None;
         Ok(())
     }
 }

@@ -50,6 +50,8 @@ impl VulkanRendererBackend<'_> {
             self.get_surface_loader()?
                 .destroy_surface(*self.get_surface()?, self.get_allocator()?);
         }
+        self.context.surface = None;
+        self.context.surface_loader = None;
         Ok(())
     }
 }
