@@ -3,8 +3,7 @@ use std::{borrow::Cow, ffi::CStr};
 use ash::{ext::debug_utils, vk};
 
 use crate::{
-    core::debug::errors::EngineError, debug, error, info,
-    renderer::vulkan::vulkan_types::VulkanRendererBackend, warn,
+    core::debug::errors::EngineError, debug_no_details, error, error_no_details, info_no_details, renderer::vulkan::vulkan_types::VulkanRendererBackend, warn_no_details
 };
 
 /// Callback function for Vulkan debug messages.
@@ -30,16 +29,16 @@ unsafe extern "system" fn vulkan_debug_callback(
     };
 
     if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::ERROR {
-        error!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
+        error_no_details!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
     }
     if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::WARNING {
-        warn!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
+        warn_no_details!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
     }
     if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::INFO {
-        debug!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
+        debug_no_details!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
     }
     if message_severity == vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE {
-        info!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
+        info_no_details!("VULKAN: {message_type:?} [{message_id_name} ({message_id_number})] : {message}\n");
     }
 
     vk::FALSE

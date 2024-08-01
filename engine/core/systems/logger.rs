@@ -71,6 +71,25 @@ pub fn print_console_error() -> fn(&str, LogLevel) {
 macro_rules! log {
     ($level:expr) => {
         if $level.is_an_error() {
+            $crate::core::systems::logger::print_console_error()(&format!("[{}] ({}:{})\n", $level, file!(), line!()), $level)
+        } else {
+            $crate::core::systems::logger::print_console()(&format!("[{}] ({}:{})\n", $level, file!(), line!()), $level)
+        }
+    };
+    ($level:expr, $($arg:tt)*) => {
+        if $level.is_an_error() {
+            $crate::core::systems::logger::print_console_error()(&format!("[{}] ({}:{}) {}\n", $level, file!(), line!(), format!($($arg)*)), $level)
+        } else {
+            $crate::core::systems::logger::print_console()(&format!("[{}] ({}:{}) {}\n", $level, file!(), line!(), format!($($arg)*)), $level);
+        }
+    };
+}
+
+/// Macro to log without the line number and file information
+#[macro_export]
+macro_rules! log_no_details {
+    ($level:expr) => {
+        if $level.is_an_error() {
             $crate::core::systems::logger::print_console_error()(&format!("[{}]\n", $level), $level)
         } else {
             $crate::core::systems::logger::print_console()(&format!("[{}]\n", $level), $level)
@@ -122,6 +141,46 @@ macro_rules! info {
     };
     ($($arg:tt)*) => {{
         $crate::log!($crate::core::systems::logger::LogLevel::Info, $($arg)*)
+    }};
+}
+
+#[macro_export]
+macro_rules! error_no_details {
+    () => {
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Error);
+    };
+    ($($arg:tt)*) => {{
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Error, $($arg)*);
+    }};
+}
+
+#[macro_export]
+macro_rules! warn_no_details {
+    () => {
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Warning)
+    };
+    ($($arg:tt)*) => {{
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Warning, $($arg)*)
+    }};
+}
+
+#[macro_export]
+macro_rules! debug_no_details {
+    () => {
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Debug)
+    };
+    ($($arg:tt)*) => {{
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Debug, $($arg)*)
+    }};
+}
+
+#[macro_export]
+macro_rules! info_no_details {
+    () => {
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Info)
+    };
+    ($($arg:tt)*) => {{
+        $crate::log_no_details!($crate::core::systems::logger::LogLevel::Info, $($arg)*)
     }};
 }
 
