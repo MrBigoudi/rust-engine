@@ -3,10 +3,12 @@ use crate::{core::debug::errors::EngineError, debug, error, platforms::platform:
 use super::vulkan_types::VulkanRendererBackend;
 
 pub mod allocator;
+pub mod command_buffer;
 pub mod debug;
 pub mod devices;
 pub mod entry;
 pub mod instance;
+pub mod renderpass;
 pub mod surface;
 pub mod swapchain;
 
@@ -95,10 +97,24 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan swapchain initialized successfully !");
         }
 
+        if let Err(err) = self.renderpass_init() {
+            error!("Failed to initialize the vulkan renderpass: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan renderpass initialized successfully !");
+        }
+
         Ok(())
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
+        if let Err(err) = self.renderpass_shutdown() {
+            error!("Failed to shutdown the vulkan renderpass: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan renderpass shutdowned successfully !");
+        }
+
         if let Err(err) = self.swapchain_shutdown() {
             error!("Failed to shutdown the vulkan swapchain: {:?}", err);
             return Err(EngineError::ShutdownFailed);

@@ -89,7 +89,7 @@ impl VulkanRendererBackend<'_> {
         &self,
         image_creation_parameters: ImageCreatorParameters,
     ) -> Result<Image, EngineError> {
-        let mut new_image = Image{
+        let mut new_image = Image {
             width: image_creation_parameters.width,
             height: image_creation_parameters.height,
             ..Default::default()

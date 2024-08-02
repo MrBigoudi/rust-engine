@@ -7,6 +7,7 @@ use ash::{
 
 use super::vulkan_init::{
     devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
+    renderpass::Renderpass,
     swapchain::Swapchain,
 };
 
@@ -31,6 +32,8 @@ pub(crate) struct VulkanContext<'a> {
     pub image_index: u32,
     pub current_frame: u32,
     pub should_recreate_swapchain: bool,
+
+    pub renderpass: Option<Renderpass>,
 }
 
 #[derive(Default)]
