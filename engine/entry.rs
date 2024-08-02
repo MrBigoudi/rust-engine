@@ -1,6 +1,8 @@
 use crate::{
     core::{
-        application::{application_init, Application, ApplicationParameters},
+        application::{
+            application_init, application_shutdown, fetch_global_application, ApplicationParameters,
+        },
         debug::errors::EngineError,
         systems::{subsystems_init, subsystems_shutdown},
     },
@@ -14,10 +16,7 @@ static mut IS_ENGINE_INITIALIZED: bool = false;
 
 /// Initiatlize the engine
 /// Can only be called once
-fn engine_init(
-    parameters: ApplicationParameters,
-    game: Box<dyn Game>,
-) -> Result<Application, EngineError> {
+fn engine_init(parameters: ApplicationParameters, game: Box<dyn Game>) -> Result<(), EngineError> {
     // Initialization
     if unsafe { IS_ENGINE_INITIALIZED } {
         error!("The engine is already initialized!");
@@ -35,16 +34,15 @@ fn engine_init(
     }
     debug!("Subsystems initialized");
 
-    let application = match application_init(parameters, game) {
-        Ok(application) => application,
-        Err(err) => {
-            error!("Failed to create the application: {:?}", err);
-            return Err(EngineError::InitializationFailed);
-        }
+    if let Err(err) = application_init(parameters, game) {
+        error!("Failed to create the application: {:?}", err);
+        return Err(EngineError::InitializationFailed);
     };
     debug!("Application initialized");
 
-    match renderer_init(&app_name.clone(), application.platform.as_ref()) {
+    let platform = fetch_global_application()?.platform.as_ref();
+
+    match renderer_init(&app_name.clone(), platform) {
         Ok(()) => (),
         Err(err) => {
             error!("Failed to initialize the renderer: {:?}", err);
@@ -55,11 +53,12 @@ fn engine_init(
 
     unsafe { IS_ENGINE_INITIALIZED = true };
 
-    Ok(application)
+    Ok(())
 }
 
 /// Main loop
-fn game_loop(application: &mut Application) -> Result<(), EngineError> {
+fn game_loop() -> Result<(), EngineError> {
+    let application = fetch_global_application()?;
     match application.run() {
         Ok(()) => Ok(()),
         Err(err) => {
@@ -70,7 +69,7 @@ fn game_loop(application: &mut Application) -> Result<(), EngineError> {
 }
 
 /// Cleanup the engine
-fn engine_shutdown(application: &mut Application) -> Result<(), EngineError> {
+fn engine_shutdown() -> Result<(), EngineError> {
     match renderer_shutdown() {
         Ok(()) => (),
         Err(err) => {
@@ -80,21 +79,15 @@ fn engine_shutdown(application: &mut Application) -> Result<(), EngineError> {
     }
     debug!("Renderer shutted down");
 
-    match application.shutdown() {
-        Ok(()) => (),
-        Err(err) => {
-            error!("Failed to shutdown the application: {:?}", err);
-            return Err(EngineError::ShutdownFailed);
-        }
+    if let Err(err) = application_shutdown() {
+        error!("Failed to shutdown the application: {:?}", err);
+        return Err(EngineError::ShutdownFailed);
     };
     debug!("Application shutted down");
 
-    match application.game.shutdown() {
-        Ok(()) => (),
-        Err(err) => {
-            error!("Failed to shutdown the game: {:?}", err);
-            return Err(EngineError::ShutdownFailed);
-        }
+    if let Err(err) = fetch_global_application()?.game.shutdown() {
+        error!("Failed to shutdown the game: {:?}", err);
+        return Err(EngineError::ShutdownFailed);
     };
     debug!("Game shutted down");
 
@@ -116,25 +109,19 @@ pub fn engine_start(
     game: Box<dyn Game>,
 ) -> Result<(), EngineError> {
     // Initialization
-    let mut application = match engine_init(parameters, game) {
-        Ok(application) => application,
-        Err(err) => {
-            error!("Failed to initialize the engine: {:?}", err);
-            return Err(EngineError::InitializationFailed);
-        }
+    if let Err(err) = engine_init(parameters, game) {
+        error!("Failed to initialize the engine: {:?}", err);
+        return Err(EngineError::InitializationFailed);
     };
     debug!("Engine initialized");
 
     // Game loop
-    game_loop(&mut application)?;
+    game_loop()?;
 
     // Cleanup
-    match engine_shutdown(&mut application) {
-        Ok(()) => (),
-        Err(err) => {
-            error!("Failed to shutdown the engine: {:?}", err);
-            return Err(EngineError::ShutdownFailed);
-        }
+    if let Err(err) = engine_shutdown() {
+        error!("Failed to shutdown the engine: {:?}", err);
+        return Err(EngineError::ShutdownFailed);
     }
 
     debug!("Engine shutted down");

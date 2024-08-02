@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
+use once_cell::sync::Lazy;
+
 use crate::{
     debug, error,
     game::Game,
@@ -92,6 +94,8 @@ pub(crate) struct ApplicationInternalState {
     pub state: ApplicationState,
     pub clock: Clock,
     pub last_time: f64,
+    pub width: u16,
+    pub height: u16,
 }
 
 pub(crate) struct Application {
@@ -100,16 +104,52 @@ pub(crate) struct Application {
     pub internal_state: Arc<Mutex<ApplicationInternalState>>,
 }
 
+#[derive(Default)]
+pub(crate) struct ApplicationWrapper {
+    pub application: Option<Application>,
+}
+
 unsafe impl Send for Application {}
 unsafe impl Sync for Application {}
 
 pub mod application_event_listeners;
 
+pub(crate) static mut GLOBAL_APPLICATION: Lazy<Mutex<ApplicationWrapper>> =
+    Lazy::new(Mutex::default);
+
+fn fetch_global_application_wrapper(
+    error: EngineError,
+) -> Result<&'static mut ApplicationWrapper, EngineError> {
+    unsafe {
+        match GLOBAL_APPLICATION.get_mut() {
+            Ok(wrapper) => Ok(wrapper),
+            Err(err) => {
+                error!("Failed to fetch the global application: {:?}", err);
+                Err(error)
+            }
+        }
+    }
+}
+
+pub(crate) fn fetch_global_application() -> Result<&'static mut Application, EngineError> {
+    let global_application = fetch_global_application_wrapper(EngineError::AccessFailed)?;
+    Ok(global_application.application.as_mut().unwrap())
+}
+
+pub(crate) fn application_get_framebuffer_size() -> Result<(u16, u16), EngineError> {
+    fetch_global_application()?.get_framebuffer_size()
+}
+
+/// Shutdown the application
+pub(crate) fn application_shutdown() -> Result<(), EngineError> {
+    fetch_global_application()?.shutdown()
+}
+
 /// Initiate the application
 pub(crate) fn application_init(
     parameters: ApplicationParameters,
     game: Box<dyn Game>,
-) -> Result<Application, EngineError> {
+) -> Result<(), EngineError> {
     let platform = platform_init(
         parameters.application_name.clone(),
         parameters.initial_x_position,
@@ -121,6 +161,9 @@ pub(crate) fn application_init(
 
     debug!("Platform initialized");
 
+    let global_application_wrapper =
+        fetch_global_application_wrapper(EngineError::InitializationFailed)?;
+
     let application = match platform {
         Err(err) => {
             error!("Failed to init the platform: {:?}", err);
@@ -131,6 +174,8 @@ pub(crate) fn application_init(
                 state: ApplicationState::Running,
                 clock: Clock::default(),
                 last_time: 0.,
+                width: parameters.initial_width,
+                height: parameters.initial_height,
             };
             Application {
                 platform: Box::new(platform),
@@ -149,7 +194,9 @@ pub(crate) fn application_init(
         return Err(EngineError::InitializationFailed);
     }
 
-    Ok(application)
+    global_application_wrapper.application = Some(application);
+
+    Ok(())
 }
 
 impl Application {
@@ -161,6 +208,13 @@ impl Application {
                 Err(EngineError::Synchronisation)
             }
         }
+    }
+
+    pub fn get_framebuffer_size(&self) -> Result<(u16, u16), EngineError> {
+        Ok((
+            self.get_internal_state()?.width,
+            self.get_internal_state()?.height,
+        ))
     }
 
     /// Run the application
