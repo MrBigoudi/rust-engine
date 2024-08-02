@@ -1,11 +1,12 @@
 use ash::{
     ext::debug_utils,
     khr::surface,
-    vk::{AllocationCallbacks, DebugUtilsMessengerEXT, PhysicalDevice, SurfaceKHR},
+    vk::{AllocationCallbacks, CommandPool, DebugUtilsMessengerEXT, PhysicalDevice, SurfaceKHR},
     Device, Entry, Instance,
 };
 
 use super::vulkan_init::{
+    command_buffer::CommandBuffer,
     devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
     renderpass::Renderpass,
     swapchain::Swapchain,
@@ -34,6 +35,9 @@ pub(crate) struct VulkanContext<'a> {
     pub should_recreate_swapchain: bool,
 
     pub renderpass: Option<Renderpass>,
+
+    pub graphics_command_pool: Option<CommandPool>,
+    pub graphics_command_buffers: Vec<CommandBuffer>,
 }
 
 #[derive(Default)]

@@ -4,6 +4,7 @@ use super::vulkan_types::VulkanRendererBackend;
 
 pub mod allocator;
 pub mod command_buffer;
+pub mod command_pool;
 pub mod debug;
 pub mod devices;
 pub mod entry;
@@ -104,10 +105,50 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan renderpass initialized successfully !");
         }
 
+        if let Err(err) = self.graphics_command_pool_init() {
+            error!(
+                "Failed to initialize the vulkan graphics command pool: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan graphics command pool initialized successfully !");
+        }
+
+        if let Err(err) = self.graphics_command_buffers_init() {
+            error!(
+                "Failed to initialize the vulkan graphics command buffers: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan graphics command buffers initialized successfully !");
+        }
+
         Ok(())
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
+        if let Err(err) = self.graphics_command_buffers_shutdown() {
+            error!(
+                "Failed to shutdown the vulkan graphics command buffers: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan graphics command buffers shutdowned successfully !");
+        }
+
+        if let Err(err) = self.graphics_command_pool_shutdown() {
+            error!(
+                "Failed to shutdown the vulkan graphics command pool: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan graphics command pool shutdowned successfully !");
+        }
+
         if let Err(err) = self.renderpass_shutdown() {
             error!("Failed to shutdown the vulkan renderpass: {:?}", err);
             return Err(EngineError::ShutdownFailed);
