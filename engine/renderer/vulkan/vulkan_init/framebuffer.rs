@@ -75,10 +75,22 @@ impl VulkanRendererBackend<'_> {
         let (width, height) = application_get_framebuffer_size()?;
         // TODO: find other solution for framebuffer size
         // Clamp framebuffer to swapchain surface capacity
-        let swapchain_support_max_extent = self.get_swapchain_support_details()?.capabilities.max_image_extent;
-        let swapchain_support_min_extent = self.get_swapchain_support_details()?.capabilities.min_image_extent;
-        self.framebuffer_width = min(swapchain_support_max_extent.width, max(swapchain_support_min_extent.width, width));
-        self.framebuffer_height = min(swapchain_support_max_extent.height, max(swapchain_support_min_extent.height, height));
+        let swapchain_support_max_extent = self
+            .get_swapchain_support_details()?
+            .capabilities
+            .max_image_extent;
+        let swapchain_support_min_extent = self
+            .get_swapchain_support_details()?
+            .capabilities
+            .min_image_extent;
+        self.framebuffer_width = min(
+            swapchain_support_max_extent.width,
+            max(swapchain_support_min_extent.width, width),
+        );
+        self.framebuffer_height = min(
+            swapchain_support_max_extent.height,
+            max(swapchain_support_min_extent.height, height),
+        );
         Ok(())
     }
 
@@ -101,10 +113,7 @@ impl VulkanRendererBackend<'_> {
 
         for image_view in image_views {
             // TODO: make this dynamic based on the currently configured attachments
-            let attachments = vec![
-                *image_view,
-                depth_attachment.image_view.unwrap(),
-            ];
+            let attachments = vec![*image_view, depth_attachment.image_view.unwrap()];
             let new_framebuffer = Framebuffer::create(
                 self.get_device()?,
                 self.get_allocator()?,

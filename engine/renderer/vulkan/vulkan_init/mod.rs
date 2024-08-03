@@ -13,6 +13,7 @@ pub mod instance;
 pub mod renderpass;
 pub mod surface;
 pub mod swapchain;
+pub mod sync_structures;
 
 impl VulkanRendererBackend<'_> {
     pub fn vulkan_init(
@@ -148,10 +149,24 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan swapchain framebuffers initialized successfully !");
         }
 
+        if let Err(err) = self.sync_structures_init() {
+            error!("Failed to initialize the vulkan sync structures: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan sync structures initialized successfully !");
+        }
+
         Ok(())
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
+        if let Err(err) = self.sync_structures_shutdown() {
+            error!("Failed to shutdown the vulkan sync structures: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan sync structures shutdowned successfully !");
+        }
+
         if let Err(err) = self.swapchain_framebuffers_shutdown() {
             error!(
                 "Failed to shutdown the vulkan swapchain framebuffers: {:?}",

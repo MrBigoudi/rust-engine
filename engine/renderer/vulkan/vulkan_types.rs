@@ -10,6 +10,7 @@ use super::vulkan_init::{
     devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
     renderpass::Renderpass,
     swapchain::Swapchain,
+    sync_structures::SyncStructure,
 };
 
 #[derive(Default)]
@@ -38,6 +39,8 @@ pub(crate) struct VulkanContext<'a> {
 
     pub graphics_command_pool: Option<CommandPool>,
     pub graphics_command_buffers: Vec<CommandBuffer>,
+
+    pub sync_structures: Option<SyncStructure<'a>>,
 }
 
 #[derive(Default)]

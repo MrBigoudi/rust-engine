@@ -84,7 +84,9 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
-    pub(crate) fn get_swapchain_support_details(&self) -> Result<SwapchainSupportDetails, EngineError> {
+    pub(crate) fn get_swapchain_support_details(
+        &self,
+    ) -> Result<SwapchainSupportDetails, EngineError> {
         self.query_swapchain_support(self.get_physical_device()?)
     }
 
@@ -93,10 +95,7 @@ impl VulkanRendererBackend<'_> {
         prefered_format: Format,
         prefered_color_space: ColorSpaceKHR,
     ) -> Result<(), EngineError> {
-
-        let supported_formats = self.get_swapchain_support_details()?
-            .formats
-            .clone();
+        let supported_formats = self.get_swapchain_support_details()?.formats.clone();
         let mut selected_format: Option<SurfaceFormatKHR> = None;
         'get_prefered_format_loop: for format in &supported_formats {
             if format.format == prefered_format && format.color_space == prefered_color_space {
@@ -117,9 +116,7 @@ impl VulkanRendererBackend<'_> {
         default_mode: PresentModeKHR,
         prefered_mode: PresentModeKHR,
     ) -> Result<PresentModeKHR, EngineError> {
-        let supported_present_modes = self.get_swapchain_support_details()?
-            .present_modes
-            .clone();
+        let supported_present_modes = self.get_swapchain_support_details()?.present_modes.clone();
         for present_mode in &supported_present_modes {
             if *present_mode == prefered_mode {
                 return Ok(prefered_mode);
@@ -129,8 +126,7 @@ impl VulkanRendererBackend<'_> {
     }
 
     fn swpachain_create_extent(&self, width: u32, height: u32) -> Result<Extent2D, EngineError> {
-        let supported_capabilities = self.get_swapchain_support_details()?
-            .capabilities;
+        let supported_capabilities = self.get_swapchain_support_details()?.capabilities;
         let mut extent = Extent2D { width, height };
         // TODO: Fix support clamp for tilling window managers
         // Clamp to the value allowed by the GPU.
@@ -142,8 +138,7 @@ impl VulkanRendererBackend<'_> {
     }
 
     fn swapchain_create_image_count(&self) -> Result<u32, EngineError> {
-        let supported_capabilities = self.get_swapchain_support_details()?
-            .capabilities;
+        let supported_capabilities = self.get_swapchain_support_details()?.capabilities;
         let image_count = supported_capabilities.min_image_count + 1;
         if supported_capabilities.max_image_count > 0 {
             Ok(min(image_count, supported_capabilities.max_image_count))
@@ -257,7 +252,8 @@ impl VulkanRendererBackend<'_> {
         // get the surface
         let surface = self.get_surface()?;
         // get the transform
-        let pre_transform = self.get_swapchain_support_details()?
+        let pre_transform = self
+            .get_swapchain_support_details()?
             .capabilities
             .current_transform;
 
