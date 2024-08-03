@@ -19,6 +19,7 @@ use crate::{
 
 use super::command_buffer::CommandBuffer;
 
+#[derive(Clone, Copy)]
 pub(crate) enum RenderpassState {
     Ready,
     Recording,
@@ -28,6 +29,7 @@ pub(crate) enum RenderpassState {
     NotAllocated,
 }
 
+#[derive(Clone, Copy)]
 pub(crate) struct Renderpass {
     pub handler: vk::RenderPass,
     pub render_area: RenderArea,
@@ -38,8 +40,8 @@ pub(crate) struct Renderpass {
 }
 
 impl VulkanRendererBackend<'_> {
-    fn init_color_attachement(&self) -> Result<AttachmentDescription, EngineError> {
-        // TODO: make the renderpass attachements configurable
+    fn init_color_attachment(&self) -> Result<AttachmentDescription, EngineError> {
+        // TODO: make the renderpass attachments configurable
         let format = self.get_swapchain()?.surface_format.format;
         Ok(
             AttachmentDescription::default()
@@ -54,8 +56,8 @@ impl VulkanRendererBackend<'_> {
         )
     }
 
-    fn init_depth_attachement(&self) -> Result<Option<AttachmentDescription>, EngineError> {
-        // TODO: make the renderpass attachements configurable
+    fn init_depth_attachment(&self) -> Result<Option<AttachmentDescription>, EngineError> {
+        // TODO: make the renderpass attachments configurable
         let format = self.get_physical_device_info()?.depth_format;
         if let Some(format) = format {
             Ok(Some(
@@ -101,23 +103,23 @@ impl VulkanRendererBackend<'_> {
         let subpass =
             SubpassDescription::default().pipeline_bind_point(PipelineBindPoint::GRAPHICS);
 
-        // Attachements
-        // TODO: make the renderpass attachements configurable
-        // Color attachement
-        let color_attachement = self.init_color_attachement()?;
-        let color_attachement_reference = [AttachmentReference::default()
-            .attachment(0) // Attachement description array index
+        // Attachments
+        // TODO: make the renderpass attachments configurable
+        // Color attachment
+        let color_attachment = self.init_color_attachment()?;
+        let color_attachment_reference = [AttachmentReference::default()
+            .attachment(0) // Attachment description array index
             .layout(ImageLayout::COLOR_ATTACHMENT_OPTIMAL)];
-        let subpass = subpass.color_attachments(&color_attachement_reference);
+        let subpass = subpass.color_attachments(&color_attachment_reference);
         // Depth attachment, if there is one
-        let depth_attachement = self.init_depth_attachement()?;
-        let has_depth = depth_attachement.is_some();
-        let depth_attachement_reference = AttachmentReference::default()
-            .attachment(1) // Attachement description array index
+        let depth_attachment = self.init_depth_attachment()?;
+        let has_depth = depth_attachment.is_some();
+        let depth_attachment_reference = AttachmentReference::default()
+            .attachment(1) // Attachment description array index
             .layout(ImageLayout::DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
-        let subpass = if let Some(depth_attachement) = depth_attachement {
-            subpass.depth_stencil_attachment(&depth_attachement_reference)
+        let subpass = if let Some(depth_attachment) = depth_attachment {
+            subpass.depth_stencil_attachment(&depth_attachment_reference)
         } else {
             subpass
         };
@@ -131,16 +133,16 @@ impl VulkanRendererBackend<'_> {
             .subpasses(&subpass)
             .dependencies(&dependencies);
 
-        let attachements = [color_attachement];
-        let attachements_with_depth = if has_depth {
-            Some([color_attachement, depth_attachement.unwrap()])
+        let attachments = [color_attachment];
+        let attachments_with_depth = if has_depth {
+            Some([color_attachment, depth_attachment.unwrap()])
         } else {
             None
         };
         let renderpass_info = if has_depth {
-            renderpass_info.attachments(attachements_with_depth.as_ref().unwrap())
+            renderpass_info.attachments(attachments_with_depth.as_ref().unwrap())
         } else {
-            renderpass_info.attachments(&attachements)
+            renderpass_info.attachments(&attachments)
         };
 
         let device = self.get_device()?;

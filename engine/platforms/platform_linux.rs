@@ -46,8 +46,8 @@ impl Platform for PlatformLinux {
         window_title: String,
         x: i16,
         y: i16,
-        width: u16,
-        height: u16,
+        width: u32,
+        height: u32,
         resizable: bool,
     ) -> Result<(), EngineError> {
         // Connect to the X server
@@ -82,8 +82,8 @@ impl Platform for PlatformLinux {
                     parent: screen.root(),
                     x,
                     y,
-                    width,
-                    height,
+                    width: width as u16,
+                    height: height as u16,
                     border_width: 0, // no border
                     class: xcb::x::WindowClass::InputOutput,
                     visual: screen.root_visual(),

@@ -10,7 +10,7 @@ use crate::{
     core::debug::errors::EngineError,
     debug, error,
     renderer::vulkan::{
-        vulkan_init::swapchain::SwapchainSupportDetails, vulkan_types::VulkanRendererBackend,
+        vulkan_types::VulkanRendererBackend,
         vulkan_utils::device_features::physical_device_features_to_vector,
     },
 };
@@ -24,7 +24,6 @@ pub(crate) struct PhysicalDeviceInfo {
     pub features: PhysicalDeviceFeatures,
     pub extension_properties: Vec<ExtensionProperties>,
     pub memory_properties: PhysicalDeviceMemoryProperties,
-    pub swapchain_support_details: SwapchainSupportDetails,
     pub depth_format: Option<Format>,
 }
 
@@ -58,9 +57,9 @@ impl VulkanRendererBackend<'_> {
 
     fn are_swapchain_requirements_fullfiled(
         &self,
-        physical_device_info: &PhysicalDeviceInfo,
+        physical_device: &PhysicalDevice,
     ) -> Result<bool, EngineError> {
-        Ok(physical_device_info.swapchain_support_details.is_complete())
+        Ok(self.query_swapchain_support(physical_device)?.is_complete())
     }
 
     fn are_extensions_requirements_fullfiled(
@@ -143,7 +142,6 @@ impl VulkanRendererBackend<'_> {
             extension_properties,
             memory_properties,
             queues: Queues::default(),
-            swapchain_support_details: SwapchainSupportDetails::default(),
             depth_format: None,
         })
     }
@@ -155,8 +153,6 @@ impl VulkanRendererBackend<'_> {
     ) -> Result<(bool, Option<PhysicalDeviceInfo>), EngineError> {
         let mut physical_device_info = self.physical_device_info_init(physical_device)?;
         physical_device_info.queues = self.queue_family_properties_create(physical_device)?;
-        physical_device_info.swapchain_support_details =
-            self.query_swapchain_support(physical_device)?;
 
         // Discrete GPU ?
         if requirements.is_discrete_gpu
@@ -172,7 +168,7 @@ impl VulkanRendererBackend<'_> {
         let are_queue_families_requirements_fullfiled =
             Self::are_queue_families_requirements_fullfiled(requirements, &physical_device_info);
         let are_swapchain_requirements_fullfiled =
-            self.are_swapchain_requirements_fullfiled(&physical_device_info)?;
+            self.are_swapchain_requirements_fullfiled(physical_device)?;
         let are_extensions_requirements_fullfiled =
             self.are_extensions_requirements_fullfiled(requirements, &physical_device_info)?;
         let are_features_requirements_fullfiled =

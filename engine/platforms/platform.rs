@@ -12,8 +12,8 @@ pub(crate) trait Platform {
         window_title: String,
         x: i16,
         y: i16,
-        width: u16,
-        height: u16,
+        width: u32,
+        height: u32,
         resizable: bool,
     ) -> Result<(), EngineError>;
 
@@ -67,8 +67,8 @@ pub(crate) fn platform_init(
     window_title: String,
     x: i16,
     y: i16,
-    width: u16,
-    height: u16,
+    width: u32,
+    height: u32,
     resizable: bool,
 ) -> Result<impl Platform, EngineError> {
     #[cfg(target_os = "linux")]

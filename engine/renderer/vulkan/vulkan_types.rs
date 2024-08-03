@@ -31,7 +31,7 @@ pub(crate) struct VulkanContext<'a> {
 
     pub swapchain: Option<Swapchain>,
     pub image_index: u32,
-    pub current_frame: u32,
+    pub current_frame: u16,
     pub should_recreate_swapchain: bool,
 
     pub renderpass: Option<Renderpass>,

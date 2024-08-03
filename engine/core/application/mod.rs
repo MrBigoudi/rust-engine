@@ -43,8 +43,8 @@ pub struct ApplicationParameters {
     pub application_name: String,
     pub initial_x_position: i16,
     pub initial_y_position: i16,
-    pub initial_width: u16,
-    pub initial_height: u16,
+    pub initial_width: u32,
+    pub initial_height: u32,
     pub flags: ApplicationParametersFlags,
 }
 
@@ -57,11 +57,11 @@ impl ApplicationParameters {
         self.initial_y_position = y;
         self
     }
-    pub fn initial_width(mut self, width: u16) -> Self {
+    pub fn initial_width(mut self, width: u32) -> Self {
         self.initial_width = width;
         self
     }
-    pub fn initial_height(mut self, height: u16) -> Self {
+    pub fn initial_height(mut self, height: u32) -> Self {
         self.initial_height = height;
         self
     }
@@ -94,8 +94,8 @@ pub(crate) struct ApplicationInternalState {
     pub state: ApplicationState,
     pub clock: Clock,
     pub last_time: f64,
-    pub width: u16,
-    pub height: u16,
+    pub width: u32,
+    pub height: u32,
 }
 
 pub(crate) struct Application {
@@ -136,7 +136,7 @@ pub(crate) fn fetch_global_application() -> Result<&'static mut Application, Eng
     Ok(global_application.application.as_mut().unwrap())
 }
 
-pub(crate) fn application_get_framebuffer_size() -> Result<(u16, u16), EngineError> {
+pub(crate) fn application_get_framebuffer_size() -> Result<(u32, u32), EngineError> {
     fetch_global_application()?.get_framebuffer_size()
 }
 
@@ -210,11 +210,10 @@ impl Application {
         }
     }
 
-    pub fn get_framebuffer_size(&self) -> Result<(u16, u16), EngineError> {
-        Ok((
-            self.get_internal_state()?.width,
-            self.get_internal_state()?.height,
-        ))
+    pub fn get_framebuffer_size(&self) -> Result<(u32, u32), EngineError> {
+        let width = self.get_internal_state()?.width;
+        let height = self.get_internal_state()?.height;
+        Ok((width, height))
     }
 
     /// Run the application

@@ -8,6 +8,7 @@ pub mod command_pool;
 pub mod debug;
 pub mod devices;
 pub mod entry;
+pub mod framebuffer;
 pub mod instance;
 pub mod renderpass;
 pub mod surface;
@@ -91,6 +92,18 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan logical device queues initialized successfully !");
         }
 
+        if let Err(err) = self.framebuffer_dimensions_init() {
+            error!(
+                "Failed to initialize the vulkan framebuffer dimensions: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan framebuffer dimensions initialized successfully: (width={:?}, height={:?})!",
+            self.framebuffer_width, self.framebuffer_height
+            );
+        }
+
         if let Err(err) = self.swapchain_init() {
             error!("Failed to initialize the vulkan swapchain: {:?}", err);
             return Err(EngineError::InitializationFailed);
@@ -125,10 +138,30 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan graphics command buffers initialized successfully !");
         }
 
+        if let Err(err) = self.swapchain_framebuffers_init() {
+            error!(
+                "Failed to initialize the vulkan swapchain framebuffers: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan swapchain framebuffers initialized successfully !");
+        }
+
         Ok(())
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
+        if let Err(err) = self.swapchain_framebuffers_shutdown() {
+            error!(
+                "Failed to shutdown the vulkan swapchain framebuffers: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan swapchain framebuffers shutdowned successfully !");
+        }
+
         if let Err(err) = self.graphics_command_buffers_shutdown() {
             error!(
                 "Failed to shutdown the vulkan graphics command buffers: {:?}",

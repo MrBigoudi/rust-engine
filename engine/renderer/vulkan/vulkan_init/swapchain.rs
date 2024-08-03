@@ -21,6 +21,8 @@ use crate::{
     warn,
 };
 
+use super::framebuffer::Framebuffer;
+
 #[derive(Default, Debug)]
 pub(crate) struct SwapchainSupportDetails {
     pub capabilities: SurfaceCapabilitiesKHR,
@@ -41,7 +43,9 @@ pub(crate) struct Swapchain {
     pub max_frames_in_flight: u16,
     pub images: Vec<Image>,
     pub image_views: Vec<ImageView>,
-    pub depth_attachement: Option<vulkan_utils::image::Image>,
+    pub depth_attachment: Option<vulkan_utils::image::Image>,
+    pub framebuffers: Vec<Framebuffer>,
+    pub extent: Extent2D,
 }
 
 impl VulkanRendererBackend<'_> {
@@ -80,14 +84,17 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
+    pub(crate) fn get_swapchain_support_details(&self) -> Result<SwapchainSupportDetails, EngineError> {
+        self.query_swapchain_support(self.get_physical_device()?)
+    }
+
     fn swapchain_select_format(
         &mut self,
         prefered_format: Format,
         prefered_color_space: ColorSpaceKHR,
     ) -> Result<(), EngineError> {
-        let supported_formats = self
-            .get_physical_device_info()?
-            .swapchain_support_details
+
+        let supported_formats = self.get_swapchain_support_details()?
             .formats
             .clone();
         let mut selected_format: Option<SurfaceFormatKHR> = None;
@@ -110,9 +117,7 @@ impl VulkanRendererBackend<'_> {
         default_mode: PresentModeKHR,
         prefered_mode: PresentModeKHR,
     ) -> Result<PresentModeKHR, EngineError> {
-        let supported_present_modes = self
-            .get_physical_device_info()?
-            .swapchain_support_details
+        let supported_present_modes = self.get_swapchain_support_details()?
             .present_modes
             .clone();
         for present_mode in &supported_present_modes {
@@ -124,23 +129,20 @@ impl VulkanRendererBackend<'_> {
     }
 
     fn swpachain_create_extent(&self, width: u32, height: u32) -> Result<Extent2D, EngineError> {
-        let supported_capabilities = self
-            .get_physical_device_info()?
-            .swapchain_support_details
+        let supported_capabilities = self.get_swapchain_support_details()?
             .capabilities;
         let mut extent = Extent2D { width, height };
+        // TODO: Fix support clamp for tilling window managers
         // Clamp to the value allowed by the GPU.
         let min_extent = supported_capabilities.min_image_extent;
-        let max_extent = supported_capabilities.min_image_extent;
+        let max_extent = supported_capabilities.max_image_extent;
         extent.width = min(max_extent.width, max(min_extent.width, extent.width));
         extent.height = min(max_extent.height, max(min_extent.height, extent.height));
         Ok(extent)
     }
 
     fn swapchain_create_image_count(&self) -> Result<u32, EngineError> {
-        let supported_capabilities = self
-            .get_physical_device_info()?
-            .swapchain_support_details
+        let supported_capabilities = self.get_swapchain_support_details()?
             .capabilities;
         let image_count = supported_capabilities.min_image_count + 1;
         if supported_capabilities.max_image_count > 0 {
@@ -226,7 +228,7 @@ impl VulkanRendererBackend<'_> {
             }
         };
         let swapchain = self.context.swapchain.as_mut().unwrap();
-        swapchain.depth_attachement = Some(depth_image);
+        swapchain.depth_attachment = Some(depth_image);
 
         Ok(())
     }
@@ -245,19 +247,17 @@ impl VulkanRendererBackend<'_> {
             let physical_device = *self.get_physical_device()?;
             let new_swapchain_support = self.query_swapchain_support(&physical_device)?;
             let physical_device_info = self.context.physical_device_info.as_mut().unwrap();
-            physical_device_info.swapchain_support_details = new_swapchain_support;
         }
         // Create extent
         let extent = self.swpachain_create_extent(width, height)?;
+        self.context.swapchain.as_mut().unwrap().extent = extent;
         // Create image count
         let image_count = self.swapchain_create_image_count()?;
 
         // get the surface
         let surface = self.get_surface()?;
         // get the transform
-        let pre_transform = self
-            .get_physical_device_info()?
-            .swapchain_support_details
+        let pre_transform = self.get_swapchain_support_details()?
             .capabilities
             .current_transform;
 
@@ -310,8 +310,8 @@ impl VulkanRendererBackend<'_> {
     }
 
     fn swapchain_destroy_base(&mut self) -> Result<(), EngineError> {
-        // Destoy depth attachement
-        let depth_image = &self.get_swapchain()?.depth_attachement;
+        // Destoy depth attachment
+        let depth_image = &self.get_swapchain()?.depth_attachment;
         if let Some(depth_image) = depth_image {
             self.destroy_image(depth_image)?;
         }
@@ -365,7 +365,9 @@ impl VulkanRendererBackend<'_> {
             max_frames_in_flight: 0,
             images: Vec::new(),
             image_views: Vec::new(),
-            depth_attachement: None,
+            depth_attachment: None,
+            framebuffers: Vec::new(),
+            extent: Extent2D::default(),
         });
 
         self.swapchain_create(self.framebuffer_width, self.framebuffer_height)?;
@@ -444,20 +446,22 @@ impl VulkanRendererBackend<'_> {
                         warn!("Found suboptimal swapchain when presenting swapchain: swapchain recreation...");
                         self.swapchain_recreate(self.framebuffer_width, self.framebuffer_height)?;
                     };
-                    Ok(())
                 }
                 Err(err) => {
                     if err == ash::vk::Result::ERROR_OUT_OF_DATE_KHR {
                         warn!("Found out of date swapchain when presenting swapchain: swapchain recreation...");
                         self.swapchain_recreate(self.framebuffer_width, self.framebuffer_height)?;
-                        Ok(())
                     } else {
                         error!("Failed to present the vulkan swapchain image: {:?}", err);
-                        Err(EngineError::VulkanFailed)
+                        return Err(EngineError::VulkanFailed);
                     }
                 }
             }
         }
+        // Increment (and loop) the index
+        self.context.current_frame =
+            (self.context.current_frame + 1) % self.get_swapchain()?.max_frames_in_flight;
+        Ok(())
     }
 
     pub fn get_swapchain(&self) -> Result<&Swapchain, EngineError> {
