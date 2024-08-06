@@ -4,6 +4,6 @@ pub(crate) enum RendererBackendType {
     DirectX,
 }
 
-pub(crate) struct RenderFrame {
+pub(crate) struct RenderFrameData {
     pub delta_time: f64,
 }

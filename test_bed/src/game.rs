@@ -17,11 +17,12 @@ impl Game for TestBedGame {
 
     fn resize(
         &mut self,
-        _new_width: u16,
-        _new_height: u16,
+        _new_width: u32,
+        _new_height: u32,
     ) -> Result<(), engine::core::debug::errors::EngineError> {
         // TODO: implement window resizing
-        todo!()
+        // todo!()
+        Ok(())
     }
 
     fn shutdown(&mut self) -> Result<(), engine::core::debug::errors::EngineError> {

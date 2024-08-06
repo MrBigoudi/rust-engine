@@ -7,11 +7,12 @@ pub(crate) trait RendererBackend {
 
     fn shutdown(&mut self) -> Result<(), EngineError>;
 
-    fn resize(&mut self, width: u16, height: u16) -> Result<(), EngineError>;
+    fn resize(&mut self, width: u32, height: u32) -> Result<(), EngineError>;
 
-    fn begin_frame(&self, delta_time: f64) -> Result<(), EngineError>;
+    /// Returns true if the frame had begun correctly
+    fn begin_frame(&mut self, delta_time: f64) -> Result<bool, EngineError>;
 
-    fn end_frame(&self, delta_time: f64) -> Result<(), EngineError>;
+    fn end_frame(&mut self, delta_time: f64) -> Result<(), EngineError>;
 
     fn increase_frame_number(&mut self) -> Result<(), EngineError>;
 

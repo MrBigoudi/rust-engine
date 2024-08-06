@@ -11,4 +11,5 @@ pub enum EngineError {
     VulkanFailed,
     AccessFailed,
     Synchronisation,
+    UpdateFailed,
 }

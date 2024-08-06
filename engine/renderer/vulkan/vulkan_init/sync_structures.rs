@@ -6,11 +6,10 @@ use crate::{
     renderer::vulkan::{vulkan_types::VulkanRendererBackend, vulkan_utils::fence::Fence},
 };
 
-pub(crate) struct SyncStructure<'a> {
+pub(crate) struct SyncStructure {
     pub image_available_semaphores: Vec<Semaphore>,
     pub queue_complete_semaphores: Vec<Semaphore>,
     pub in_flight_fences: Vec<Fence>,
-    pub in_flight_images_fences: Vec<&'a Fence>,
 }
 
 impl VulkanRendererBackend<'_> {
@@ -37,17 +36,13 @@ impl VulkanRendererBackend<'_> {
         for _ in 0..max_frames_in_flight {
             image_available_semaphores.push(self.create_default_semaphore()?);
             queue_complete_semaphores.push(self.create_default_semaphore()?);
-            // Create the fence in a signaled state, indicating that the first frame has already been "rendered"
-            // This will prevent the application from waiting indefinitely for the first frame to render since it
-            // cannot be rendered until a frame is "rendered" before it
             in_flight_fences.push(Fence::create(device, allocator, true)?);
         }
 
-        self.context.sync_structures = Some(SyncStructure{
+        self.context.sync_structures = Some(SyncStructure {
             image_available_semaphores,
             queue_complete_semaphores,
             in_flight_fences,
-            in_flight_images_fences: Vec::new(),
         });
 
         Ok(())
@@ -66,10 +61,10 @@ impl VulkanRendererBackend<'_> {
         let in_flight_fences = &self
             .context
             .sync_structures
-            .as_mut()
+            .as_ref()
             .unwrap()
             .in_flight_fences;
-        for mut fence in in_flight_fences.clone() {
+        for fence in in_flight_fences {
             fence.destroy(self.get_device()?, self.get_allocator()?)?;
         }
 
@@ -78,7 +73,6 @@ impl VulkanRendererBackend<'_> {
         sync_structures.image_available_semaphores.clear();
         sync_structures.queue_complete_semaphores.clear();
         sync_structures.in_flight_fences.clear();
-        sync_structures.in_flight_images_fences.clear();
 
         Ok(())
     }

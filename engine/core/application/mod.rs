@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
@@ -6,9 +6,12 @@ use crate::{
     debug, error,
     game::Game,
     platforms::platform::{platform_init, Platform},
+    renderer::{renderer_frontend::renderer_draw_frame, renderer_types::RenderFrameData},
 };
 
 use super::{debug::clock::Clock, debug::errors::EngineError, systems::input::input_update};
+
+pub mod event_listeners;
 
 /// Flags for the application
 pub struct ApplicationParametersFlags {
@@ -88,20 +91,19 @@ impl Default for ApplicationParameters {
 pub(crate) enum ApplicationState {
     Running,
     ShuttingDown,
-}
-
-pub(crate) struct ApplicationInternalState {
-    pub state: ApplicationState,
-    pub clock: Clock,
-    pub last_time: f64,
-    pub width: u32,
-    pub height: u32,
+    Suspended,
 }
 
 pub(crate) struct Application {
     pub platform: Box<dyn Platform>,
     pub game: Box<dyn Game>,
-    pub internal_state: Arc<Mutex<ApplicationInternalState>>,
+
+    pub state: ApplicationState,
+    pub clock: Clock,
+    pub last_time: f64,
+    pub width: u32,
+    pub height: u32,
+    pub is_resizable: bool,
 }
 
 #[derive(Default)]
@@ -111,8 +113,6 @@ pub(crate) struct ApplicationWrapper {
 
 unsafe impl Send for Application {}
 unsafe impl Sync for Application {}
-
-pub mod application_event_listeners;
 
 pub(crate) static mut GLOBAL_APPLICATION: Lazy<Mutex<ApplicationWrapper>> =
     Lazy::new(Mutex::default);
@@ -169,20 +169,16 @@ pub(crate) fn application_init(
             error!("Failed to init the platform: {:?}", err);
             return Err(EngineError::InitializationFailed);
         }
-        Ok(platform) => {
-            let internal_state = ApplicationInternalState {
-                state: ApplicationState::Running,
-                clock: Clock::default(),
-                last_time: 0.,
-                width: parameters.initial_width,
-                height: parameters.initial_height,
-            };
-            Application {
-                platform: Box::new(platform),
-                game,
-                internal_state: Arc::new(Mutex::new(internal_state)),
-            }
-        }
+        Ok(platform) => Application {
+            platform: Box::new(platform),
+            game,
+            state: ApplicationState::Running,
+            clock: Clock::default(),
+            last_time: 0.,
+            width: parameters.initial_width,
+            height: parameters.initial_height,
+            is_resizable: parameters.flags.is_window_resizable,
+        },
     };
 
     // register events
@@ -200,39 +196,26 @@ pub(crate) fn application_init(
 }
 
 impl Application {
-    fn get_internal_state(&self) -> Result<MutexGuard<ApplicationInternalState>, EngineError> {
-        match self.internal_state.lock() {
-            Ok(state) => Ok(state),
-            Err(err) => {
-                error!("Failed to get the application internal state: {:?}", err);
-                Err(EngineError::Synchronisation)
-            }
-        }
-    }
-
     pub fn get_framebuffer_size(&self) -> Result<(u32, u32), EngineError> {
-        let width = self.get_internal_state()?.width;
-        let height = self.get_internal_state()?.height;
+        let width = self.width;
+        let height = self.height;
         Ok((width, height))
     }
 
     /// Run the application
     pub fn run(&mut self) -> Result<(), EngineError> {
-        self.get_internal_state()?
-            .clock
-            .start(self.platform.as_ref())?;
-        self.get_internal_state()?
-            .clock
-            .update(self.platform.as_ref())?;
-        let mut internal_state = self.get_internal_state()?;
-        internal_state.last_time = internal_state.clock.elapsed_time;
-        drop(internal_state);
+        self.clock.start(self.platform.as_ref())?;
+        self.clock.update(self.platform.as_ref())?;
+        self.last_time = self.clock.elapsed_time;
 
         let mut running_time: f64 = 0.;
         let mut frame_count: u32 = 0;
         let target_frame_seconds: f64 = 1. / 60.;
 
-        'main_loop: while self.get_internal_state()?.state == ApplicationState::Running {
+        'main_loop: while self.state != ApplicationState::ShuttingDown {
+            if self.state == ApplicationState::Suspended {
+                continue 'main_loop;
+            }
             // handle the events
             let should_quit = match self.platform.handle_events() {
                 Ok(flag) => flag,
@@ -249,11 +232,9 @@ impl Application {
             }
 
             // update clock and get delta time.
-            self.get_internal_state()?
-                .clock
-                .update(self.platform.as_ref())?;
-            let current_time: f64 = self.get_internal_state()?.clock.elapsed_time;
-            let delta: f64 = current_time - self.get_internal_state()?.last_time;
+            self.clock.update(self.platform.as_ref())?;
+            let current_time: f64 = self.clock.elapsed_time;
+            let delta: f64 = current_time - self.last_time;
             let frame_start_time: f64 = self.platform.as_ref().get_absolute_time_in_seconds()?;
 
             // update the game
@@ -273,6 +254,10 @@ impl Application {
                     return Err(EngineError::Unknown);
                 }
             }
+
+            // Create frame and render
+            let frame_data = RenderFrameData { delta_time: delta };
+            renderer_draw_frame(&frame_data)?;
 
             // Figure out how long the frame took and, if below
             let frame_end_time: f64 = self.platform.get_absolute_time_in_seconds()?;
@@ -306,14 +291,14 @@ impl Application {
 
             // debug!("delta: {}, last_time: {}", delta, self.last_time);
             // update last time
-            self.get_internal_state()?.last_time = current_time;
+            self.last_time = current_time;
         }
         Ok(())
     }
 
     /// Shutdown the application
     pub fn shutdown(&mut self) -> Result<(), EngineError> {
-        self.get_internal_state()?.state = ApplicationState::ShuttingDown;
+        self.state = ApplicationState::ShuttingDown;
         match self.platform.shutdown() {
             Err(err) => {
                 error!("Failed to shut down the application: {:?}", err);

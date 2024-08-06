@@ -11,6 +11,7 @@ use crate::{
     core::{
         debug::errors::EngineError,
         systems::{
+            events::{event_fire, EventCode},
             input::{
                 keyboard::{intput_process_key, Key, KeyState},
                 mouse::{
@@ -357,8 +358,13 @@ impl Platform for PlatformLinux {
                                 }
 
                                 // Resizing
-                                xcb::x::Event::ConfigureNotify(_) => {
-                                    continue 'infinite_loop; //TODO: implement window resizing
+                                xcb::x::Event::ConfigureNotify(event) => {
+                                    // This is also triggered by moving the window
+                                    let new_event = EventCode::Resized {
+                                        width: event.width() as u32,
+                                        height: event.height() as u32,
+                                    };
+                                    event_fire(new_event)?;
                                 }
 
                                 xcb::x::Event::ClientMessage(client_message_event) => {

@@ -33,14 +33,15 @@ pub(crate) struct VulkanContext<'a> {
     pub swapchain: Option<Swapchain>,
     pub image_index: u32,
     pub current_frame: u16,
-    pub should_recreate_swapchain: bool,
+
+    pub has_framebuffer_been_resized: bool,
 
     pub renderpass: Option<Renderpass>,
 
     pub graphics_command_pool: Option<CommandPool>,
     pub graphics_command_buffers: Vec<CommandBuffer>,
 
-    pub sync_structures: Option<SyncStructure<'a>>,
+    pub sync_structures: Option<SyncStructure>,
 }
 
 #[derive(Default)]

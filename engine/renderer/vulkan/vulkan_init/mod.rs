@@ -160,6 +160,8 @@ impl VulkanRendererBackend<'_> {
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
+        self.device_wait_idle()?;
+
         if let Err(err) = self.sync_structures_shutdown() {
             error!("Failed to shutdown the vulkan sync structures: {:?}", err);
             return Err(EngineError::ShutdownFailed);

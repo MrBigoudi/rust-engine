@@ -13,7 +13,7 @@ pub trait Game {
     fn render(&self, delta_time: f64) -> Result<(), EngineError>;
 
     /// Resize
-    fn resize(&mut self, new_width: u16, new_height: u16) -> Result<(), EngineError>;
+    fn resize(&mut self, new_width: u32, new_height: u32) -> Result<(), EngineError>;
 
     /// Shutdown
     fn shutdown(&mut self) -> Result<(), EngineError>;

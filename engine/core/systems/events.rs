@@ -22,7 +22,7 @@ pub(crate) enum EventCode {
     /// Mouse wheel moved
     MouseWheel { z_delta: i8 },
     /// Resized/resolution changed from the OS
-    Resized { width: u16, height: u16 },
+    Resized { width: u32, height: u32 },
 }
 
 impl EventCode {

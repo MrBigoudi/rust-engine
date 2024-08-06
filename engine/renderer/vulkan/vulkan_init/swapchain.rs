@@ -116,8 +116,8 @@ impl VulkanRendererBackend<'_> {
         default_mode: PresentModeKHR,
         prefered_mode: PresentModeKHR,
     ) -> Result<PresentModeKHR, EngineError> {
-        let supported_present_modes = self.get_swapchain_support_details()?.present_modes.clone();
-        for present_mode in &supported_present_modes {
+        let supported_present_modes = &self.get_swapchain_support_details()?.present_modes;
+        for present_mode in supported_present_modes {
             if *present_mode == prefered_mode {
                 return Ok(prefered_mode);
             }
@@ -337,7 +337,7 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
-    pub fn swapchain_recreate(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
+    fn recreate(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
         if let Err(err) = self.swapchain_destroy_base() {
             error!(
                 "Failed to destroy previous swapchain when recreating a swapchain: {:?}",
@@ -349,6 +349,26 @@ impl VulkanRendererBackend<'_> {
             error!("Failed to create a new swapchain: {:?}", err);
             return Err(EngineError::InitializationFailed);
         }
+        Ok(())
+    }
+
+    pub fn swapchain_recreate(&mut self) -> Result<(), EngineError> {
+        // Wait for any operations to complete.
+        self.device_wait_idle()?;
+
+        self.renderpass_render_area_clamp()?;
+        let width = self.framebuffer_width;
+        let height = self.framebuffer_height;
+        self.recreate(width, height)?;
+
+        // cleanup sync structures
+        self.sync_structures_shutdown()?;
+        self.sync_structures_init()?;
+
+        // cleanup framebuffers
+        self.swapchain_framebuffers_shutdown()?;
+        self.swapchain_framebuffers_init()?;
+
         Ok(())
     }
 
@@ -371,13 +391,14 @@ impl VulkanRendererBackend<'_> {
     }
 
     pub fn swapchain_shutdown(&mut self) -> Result<(), EngineError> {
+        self.device_wait_idle()?;
         self.swapchain_destroy_base()?;
         self.context.swapchain = None;
         Ok(())
     }
 
     pub fn get_swapchain_next_image_index(
-        &mut self,
+        &self,
         timeout_in_nanoseconds: u64,
         image_available_semaphore: Semaphore,
         fence: Fence,
@@ -393,7 +414,6 @@ impl VulkanRendererBackend<'_> {
                 Ok((image_index, is_suboptimal)) => {
                     if is_suboptimal {
                         warn!("Found suboptimal swapchain when acquiring next image index: swapchain recreation...");
-                        self.swapchain_recreate(self.framebuffer_width, self.framebuffer_height)?;
                         Ok(None)
                     } else {
                         Ok(Some(image_index))
@@ -402,7 +422,6 @@ impl VulkanRendererBackend<'_> {
                 Err(err) => {
                     if err == ash::vk::Result::ERROR_OUT_OF_DATE_KHR {
                         warn!("Found out of date swapchain when acquiring next image index: swapchain recreation...");
-                        self.swapchain_recreate(self.framebuffer_width, self.framebuffer_height)?;
                         Ok(None)
                     } else {
                         error!(
@@ -416,11 +435,11 @@ impl VulkanRendererBackend<'_> {
         }
     }
 
-    pub fn present_swapchain(
+    pub fn swapchain_present(
         &mut self,
         render_complete_semaphore: Semaphore,
         present_image_index: u32,
-    ) -> Result<(), EngineError> {
+    ) -> Result<Option<()>, EngineError> {
         let swapchain = self.get_swapchain()?;
         let wait_sempahores = [render_complete_semaphore];
         let swapchains = [swapchain.handler];
@@ -440,13 +459,13 @@ impl VulkanRendererBackend<'_> {
                 Ok(is_suboptimal) => {
                     if is_suboptimal {
                         warn!("Found suboptimal swapchain when presenting swapchain: swapchain recreation...");
-                        self.swapchain_recreate(self.framebuffer_width, self.framebuffer_height)?;
+                        return Ok(None);
                     };
                 }
                 Err(err) => {
                     if err == ash::vk::Result::ERROR_OUT_OF_DATE_KHR {
                         warn!("Found out of date swapchain when presenting swapchain: swapchain recreation...");
-                        self.swapchain_recreate(self.framebuffer_width, self.framebuffer_height)?;
+                        return Ok(None);
                     } else {
                         error!("Failed to present the vulkan swapchain image: {:?}", err);
                         return Err(EngineError::VulkanFailed);
@@ -457,7 +476,7 @@ impl VulkanRendererBackend<'_> {
         // Increment (and loop) the index
         self.context.current_frame =
             (self.context.current_frame + 1) % self.get_swapchain()?.max_frames_in_flight;
-        Ok(())
+        Ok(Some(()))
     }
 
     pub fn get_swapchain(&self) -> Result<&Swapchain, EngineError> {

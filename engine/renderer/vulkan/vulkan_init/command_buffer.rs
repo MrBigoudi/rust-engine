@@ -1,7 +1,7 @@
 use ash::{
     vk::{
         self, CommandBufferAllocateInfo, CommandBufferBeginInfo, CommandBufferLevel,
-        CommandBufferUsageFlags, CommandPool, Fence, Queue, SubmitInfo,
+        CommandBufferResetFlags, CommandBufferUsageFlags, CommandPool, Fence, Queue, SubmitInfo,
     },
     Device,
 };
@@ -10,19 +10,9 @@ use crate::{
     core::debug::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend,
 };
 
-#[derive(Clone, Copy)]
-pub(crate) enum CommandBufferState {
-    Ready,
-    Recording,
-    InRenderPass,
-    RecordingEnded,
-    Submitted,
-}
-
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct CommandBuffer {
-    pub handler: vk::CommandBuffer,
-    pub state: CommandBufferState,
+    pub handler: Box<vk::CommandBuffer>,
 }
 
 impl CommandBuffer {
@@ -50,21 +40,32 @@ impl CommandBuffer {
             }
         };
         Ok(CommandBuffer {
-            handler,
-            state: CommandBufferState::Ready,
+            handler: Box::new(handler),
         })
     }
 
-    pub fn free(self, device: &Device, command_pool: &CommandPool) -> Result<(), EngineError> {
-        let command_buffers = [self.handler];
+    pub fn free(&self, device: &Device, command_pool: &CommandPool) -> Result<(), EngineError> {
+        let command_buffers = [*self.handler.as_ref()];
         unsafe {
             device.free_command_buffers(*command_pool, &command_buffers);
         }
         Ok(())
     }
 
+    pub fn reset(&self, device: &Device) -> Result<(), EngineError> {
+        unsafe {
+            if let Err(err) = device
+                .reset_command_buffer(*self.handler.as_ref(), CommandBufferResetFlags::empty())
+            {
+                error!("Failed to reset the command buffer: {:?}", err);
+                return Err(EngineError::VulkanFailed);
+            }
+        }
+        Ok(())
+    }
+
     pub fn begin(
-        &mut self,
+        &self,
         device: &Device,
         is_single_use: bool,
         is_renderpass_continue: bool,
@@ -82,19 +83,20 @@ impl CommandBuffer {
         }
 
         unsafe {
-            if let Err(err) = device.begin_command_buffer(self.handler, &command_buffer_info) {
+            if let Err(err) =
+                device.begin_command_buffer(*self.handler.as_ref(), &command_buffer_info)
+            {
                 error!("Failed to begin a vulkan command buffer: {:?}", err);
                 return Err(EngineError::VulkanFailed);
             }
         }
 
-        self.state = CommandBufferState::Recording;
         Ok(())
     }
 
     pub fn end(&self, device: &Device) -> Result<(), EngineError> {
         unsafe {
-            if let Err(err) = device.end_command_buffer(self.handler) {
+            if let Err(err) = device.end_command_buffer(*self.handler.as_ref()) {
                 error!("Failed to end a vulkan command buffer: {:?}", err);
                 return Err(EngineError::VulkanFailed);
             }
@@ -102,19 +104,11 @@ impl CommandBuffer {
         Ok(())
     }
 
-    pub fn update_submitted(&mut self) {
-        self.state = CommandBufferState::Submitted;
-    }
-
-    pub fn reset(&mut self) {
-        self.state = CommandBufferState::Ready;
-    }
-
     pub fn allocate_and_begin_single_use(
         device: &Device,
         command_pool: &CommandPool,
     ) -> Result<CommandBuffer, EngineError> {
-        let mut new_buffer = Self::allocate(command_pool, true, device)?;
+        let new_buffer = Self::allocate(command_pool, true, device)?;
         let is_single_use = true;
         let is_renderpass_continue = false;
         let is_simultaneous_use = false;
@@ -137,7 +131,7 @@ impl CommandBuffer {
         self.end(device)?;
 
         // Submit the queue
-        let command_buffers = [self.handler];
+        let command_buffers = [*self.handler.as_ref()];
         let submit_info = [SubmitInfo::default().command_buffers(&command_buffers)];
 
         unsafe {
@@ -167,7 +161,7 @@ impl VulkanRendererBackend<'_> {
         let device = self.get_device()?;
         let command_pool = self.get_graphics_command_pool()?;
 
-        for buffer in self.context.graphics_command_buffers.clone() {
+        for buffer in &self.context.graphics_command_buffers {
             buffer.free(device, command_pool)?;
         }
         self.context.graphics_command_buffers.clear();

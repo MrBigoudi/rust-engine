@@ -63,7 +63,7 @@ fn game_loop() -> Result<(), EngineError> {
         Ok(()) => Ok(()),
         Err(err) => {
             error!("The application failed to run: {:?}", err);
-            Err(EngineError::InitializationFailed)
+            Err(EngineError::Unknown)
         }
     }
 }

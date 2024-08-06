@@ -5,10 +5,9 @@ use ash::{
 
 use crate::{core::debug::errors::EngineError, error, warn};
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub(crate) struct Fence {
-    pub handler: vk::Fence,
-    pub is_signaled: bool,
+    pub handler: Box<vk::Fence>,
 }
 
 impl Fence {
@@ -33,62 +32,46 @@ impl Fence {
         };
 
         Ok(Fence {
-            handler,
-            is_signaled,
+            handler: Box::new(handler),
         })
     }
 
     pub fn destroy(
-        &mut self,
+        &self,
         device: &Device,
         allocator: Option<&vk::AllocationCallbacks<'_>>,
     ) -> Result<(), EngineError> {
         unsafe {
-            device.destroy_fence(self.handler, allocator);
+            device.destroy_fence(*self.handler.as_ref(), allocator);
         };
-        self.is_signaled = false;
         Ok(())
     }
 
-    pub fn wait(
-        &mut self,
-        device: &Device,
-        timeout_in_nanoseconds: u64,
-    ) -> Result<bool, EngineError> {
-        if self.is_signaled {
-            return Ok(true);
-        }
-
-        let fences = [self.handler];
+    pub fn wait(&self, device: &Device, timeout_in_nanoseconds: u64) -> Result<(), EngineError> {
+        let fences = [*self.handler.as_ref()];
         unsafe {
             match device.wait_for_fences(&fences, true, timeout_in_nanoseconds) {
-                Ok(()) => {
-                    self.is_signaled = true;
-                }
+                Ok(()) => Ok(()),
                 Err(ash::vk::Result::TIMEOUT) => {
                     warn!(
                         "Warning waiting for a vulkan fence: {:?}",
                         ash::vk::Result::TIMEOUT
                     );
+                    Ok(())
                 }
                 Err(err) => {
                     error!("Failed to wait for a vulkan fence: {:?}", err);
-                    return Err(EngineError::VulkanFailed);
+                    Err(EngineError::VulkanFailed)
                 }
             }
         }
-
-        Ok(false)
     }
 
-    pub fn reset(&mut self, device: &Device) -> Result<(), EngineError> {
-        if self.is_signaled {
-            let fences = [self.handler];
-            if let Err(err) = unsafe { device.reset_fences(&fences) } {
-                error!("Failed to reset a vulkan fence: {:?}", err);
-                return Err(EngineError::VulkanFailed);
-            }
-            self.is_signaled = false;
+    pub fn reset(&self, device: &Device) -> Result<(), EngineError> {
+        let fences = [*self.handler.as_ref()];
+        if let Err(err) = unsafe { device.reset_fences(&fences) } {
+            error!("Failed to reset a vulkan fence: {:?}", err);
+            return Err(EngineError::VulkanFailed);
         }
         Ok(())
     }

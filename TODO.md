@@ -1,4 +1,5 @@
 # TODO list
 
-- implement fences
+- window resizing
+- draw frame
 - change elements visibility/rights

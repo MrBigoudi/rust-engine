@@ -11,15 +11,12 @@ use crate::{
     error,
     renderer::{
         utils::{color::Color, render_area::RenderArea},
-        vulkan::{
-            vulkan_init::command_buffer::CommandBufferState, vulkan_types::VulkanRendererBackend,
-        },
+        vulkan::vulkan_types::VulkanRendererBackend,
     },
 };
 
 use super::command_buffer::CommandBuffer;
 
-#[derive(Clone, Copy)]
 pub(crate) enum RenderpassState {
     Ready,
     Recording,
@@ -29,7 +26,6 @@ pub(crate) enum RenderpassState {
     NotAllocated,
 }
 
-#[derive(Clone, Copy)]
 pub(crate) struct Renderpass {
     pub handler: vk::RenderPass,
     pub render_area: RenderArea,
@@ -85,6 +81,16 @@ impl VulkanRendererBackend<'_> {
             .dst_access_mask(
                 AccessFlags::COLOR_ATTACHMENT_READ | AccessFlags::COLOR_ATTACHMENT_WRITE,
             ))
+    }
+
+    pub fn renderpass_render_area_clamp(&mut self) -> Result<(), EngineError> {
+        self.framebuffer_dimensions_init()?;
+        let width = self.framebuffer_width as f32;
+        let height = self.framebuffer_height as f32;
+        let render_area = &mut self.context.renderpass.as_mut().unwrap().render_area;
+        render_area.width = width;
+        render_area.height = height;
+        Ok(())
     }
 
     pub fn renderpass_init(&mut self) -> Result<(), EngineError> {
@@ -176,9 +182,10 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
+    /// None if there swapchain needs to be recreated
     pub fn renderpass_begin(
-        &mut self,
-        command_buffer: &mut CommandBuffer,
+        &self,
+        command_buffer: &CommandBuffer,
         frame_buffer: Framebuffer,
     ) -> Result<(), EngineError> {
         let renderpass = self.get_renderpass()?;
@@ -186,10 +193,19 @@ impl VulkanRendererBackend<'_> {
             x: renderpass.render_area.x as i32,
             y: renderpass.render_area.y as i32,
         };
+
         let render_area_extent = Extent2D {
             width: renderpass.render_area.width as u32,
             height: renderpass.render_area.height as u32,
         };
+
+        if render_area_extent.width > self.framebuffer_width
+            || render_area_extent.height > self.framebuffer_height
+        {
+            error!("Could not begin the renderpass, the render area ({:?}, {:?}) is bigger than the framebuffer ({:?}, {:?})",
+        render_area_extent.width, render_area_extent.height, self.framebuffer_width, self.framebuffer_height);
+            return Err(EngineError::InvalidValue);
+        }
 
         let clear_values_color: ClearValue = ClearValue {
             color: ClearColorValue {
@@ -221,25 +237,20 @@ impl VulkanRendererBackend<'_> {
         let device = self.get_device()?;
         unsafe {
             device.cmd_begin_render_pass(
-                command_buffer.handler,
+                *command_buffer.handler.as_ref(),
                 &renderpass_begin_info,
                 SubpassContents::INLINE,
             )
         };
-        command_buffer.state = CommandBufferState::InRenderPass;
 
         Ok(())
     }
 
-    pub fn renderpass_end(
-        &mut self,
-        command_buffer: &mut CommandBuffer,
-    ) -> Result<(), EngineError> {
+    pub fn renderpass_end(&self, command_buffer: &CommandBuffer) -> Result<(), EngineError> {
         let device = self.get_device()?;
         unsafe {
-            device.cmd_end_render_pass(command_buffer.handler);
+            device.cmd_end_render_pass(*command_buffer.handler.as_ref());
         };
-        command_buffer.state = CommandBufferState::Recording;
         Ok(())
     }
 

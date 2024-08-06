@@ -87,4 +87,15 @@ impl VulkanRendererBackend<'_> {
             }
         }
     }
+
+    pub fn device_wait_idle(&self) -> Result<(), EngineError> {
+        let device = self.get_device()?;
+        unsafe {
+            if let Err(err) = device.device_wait_idle() {
+                error!("Failed to wait idle the vulkan device: {:?}", err);
+                return Err(EngineError::VulkanFailed);
+            }
+        }
+        Ok(())
+    }
 }

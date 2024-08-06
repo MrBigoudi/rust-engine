@@ -2,11 +2,11 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
-use crate::{core::debug::errors::EngineError, error, platforms::platform::Platform};
+use crate::{core::debug::errors::EngineError, error, platforms::platform::Platform, warn};
 
 use super::{
     renderer_backend::{renderer_backend_init, RendererBackend},
-    renderer_types::{RenderFrame, RendererBackendType},
+    renderer_types::{RenderFrameData, RendererBackendType},
 };
 
 #[derive(Default)]
@@ -44,15 +44,14 @@ impl RendererFrontend {
         Ok(())
     }
 
-    fn begin_frame(&mut self, delta_time: f64) -> Result<(), EngineError> {
+    fn begin_frame(&mut self, delta_time: f64) -> Result<bool, EngineError> {
         match self.backend.as_mut().unwrap().begin_frame(delta_time) {
-            Ok(()) => (),
+            Ok(val) => Ok(val),
             Err(err) => {
                 error!("Failed to begin the renderer backend frame: {:?}", err);
-                return Err(EngineError::Unknown);
+                Err(EngineError::Unknown)
             }
         }
-        Ok(())
     }
 
     fn end_frame(&mut self, delta_time: f64) -> Result<(), EngineError> {
@@ -76,15 +75,15 @@ impl RendererFrontend {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, frame_data: &RenderFrame) -> Result<(), EngineError> {
+    pub fn draw_frame(&mut self, frame_data: &RenderFrameData) -> Result<(), EngineError> {
         // If the begin frame returned successfully, mid-frame operations may continue.
         match self.begin_frame(frame_data.delta_time) {
             Err(err) => {
                 error!("Failed to begin the renderer frontend frame: {:?}", err);
                 Err(EngineError::Unknown)
             }
-            Ok(()) => {
-                // End the frame. If this fails, it is likely unrecoverable.
+            Ok(true) => {
+                // End the frame. If this fails, it is likely unrecoverable
                 match self.end_frame(frame_data.delta_time) {
                     Err(err) => {
                         error!("Failed to end the renderer frontend frame: {:?}", err);
@@ -93,13 +92,27 @@ impl RendererFrontend {
                     Ok(()) => Ok(()),
                 }
             }
+            Ok(false) => {
+                warn!("Could not begin the frame, skipping it");
+                Ok(())
+            }
         }
+    }
+
+    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
+        if let Err(err) = self.backend.as_mut().unwrap().resize(width, height) {
+            error!("Failed to resize the renderer frontend: {:?}", err);
+            return Err(EngineError::Unknown);
+        }
+        Ok(())
     }
 }
 
 pub(crate) static mut GLOBAL_RENDERER: Lazy<Mutex<RendererFrontend>> = Lazy::new(Mutex::default);
 
-fn fetch_global_renderer(error: EngineError) -> Result<&'static mut RendererFrontend, EngineError> {
+pub(crate) fn fetch_global_renderer(
+    error: EngineError,
+) -> Result<&'static mut RendererFrontend, EngineError> {
     unsafe {
         match GLOBAL_RENDERER.get_mut() {
             Ok(renderer) => Ok(renderer),
@@ -122,6 +135,18 @@ pub(crate) fn renderer_init(
         Err(err) => {
             error!("Failed to initialize the renderer: {:?}", err);
             return Err(EngineError::InitializationFailed);
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn renderer_draw_frame(frame_data: &RenderFrameData) -> Result<(), EngineError> {
+    let global_renderer = fetch_global_renderer(EngineError::InitializationFailed)?;
+    match global_renderer.draw_frame(frame_data) {
+        Ok(()) => (),
+        Err(err) => {
+            error!("Failed to render a frame: {:?}", err);
+            return Err(EngineError::Unknown);
         }
     }
     Ok(())
