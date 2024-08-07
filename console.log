@@ -1,0 +1,163 @@
+[DEBUG] (engine/core/systems/mod.rs:17) Logger subsystem initialized
+[DEBUG] (engine/core/systems/mod.rs:26) Events subsystem initialized
+[DEBUG] (engine/core/systems/mod.rs:35) Input subsystem initialized
+[DEBUG] (engine/entry.rs:35) Subsystems initialized
+[DEBUG] (engine/core/application/mod.rs:162) Platform initialized
+[DEBUG] (engine/entry.rs:41) Application initialized
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:29) Vulkan entry initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:36) Vulkan allocator initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/instance.rs:78) Extensions:
+[DEBUG] (engine/renderer/vulkan/vulkan_init/instance.rs:81) 	"VK_KHR_xcb_surface"
+[DEBUG] (engine/renderer/vulkan/vulkan_init/instance.rs:81) 	"VK_KHR_surface"
+[DEBUG] (engine/renderer/vulkan/vulkan_init/instance.rs:81) 	"VK_EXT_debug_utils"
+[DEBUG] (engine/renderer/vulkan/vulkan_init/instance.rs:86) Layers:
+[DEBUG] (engine/renderer/vulkan/vulkan_init/instance.rs:89) 	"VK_LAYER_KHRONOS_validation"
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:43) Vulkan instance initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:52) Vulkan debugger initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:60) Vulkan surface initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:70) Vulkan device requirements initialized successfully !
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] : linux_read_sorted_physical_devices:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      Original order:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            [0] Intel(R) Xe Graphics (TGL GT2)
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      Sorted order:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            [0] Intel(R) Xe Graphics (TGL GT2)  
+
+[INFO] VULKAN: GENERAL [Loader Message (0)] : Copying old device 0 into new device 0
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] : linux_read_sorted_physical_devices:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      Original order:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            [0] Intel(R) Xe Graphics (TGL GT2)
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      Sorted order:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            [0] Intel(R) Xe Graphics (TGL GT2)  
+
+[INFO] VULKAN: GENERAL [Loader Message (0)] : Copying old device 0 into new device 0
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] : Removing driver /usr/lib/libvulkan_intel_hasvk.so due to not having any physical devices
+
+[DEBUG] (engine/renderer/vulkan/vulkan_init/devices/physical_device.rs:240) Found physical device
+[DEBUG] (engine/renderer/vulkan/vulkan_init/devices/physical_device.rs:189) 	Selected device: "Intel(R) Xe Graphics (TGL GT2)"
+[DEBUG] (engine/renderer/vulkan/vulkan_init/devices/physical_device.rs:195) 	GPU type is integrated
+[DEBUG] (engine/renderer/vulkan/vulkan_init/devices/physical_device.rs:201) 	GPU Driver version: 24.1.4
+[DEBUG] (engine/renderer/vulkan/vulkan_init/devices/physical_device.rs:208) 	Vulkan API version: 1.3.278
+
+
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:77) Vulkan physical device initialized successfully !
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] : Inserted device layer "VK_LAYER_KHRONOS_validation" (libVkLayer_khronos_validation.so)
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] : vkCreateDevice layer callstack setup to:
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :    <Application>
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      ||
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :    <Loader>
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      ||
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :    VK_LAYER_KHRONOS_validation
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            Type: Explicit
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            Manifest: /usr/share/vulkan/explicit_layer.d/VkLayer_khronos_validation.json
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :            Library:  libVkLayer_khronos_validation.so
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :      ||
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :    <Device>
+
+[DEBUG] VULKAN: GENERAL [Loader Message (0)] :        Using "Intel(R) Xe Graphics (TGL GT2)" with driver: "/usr/lib/libvulkan_intel.so"
+
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:84) Vulkan logical device initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:94) Vulkan logical device queues initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:104) Vulkan framebuffer dimensions initialized successfully: (width=1124, height=1476)!
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:113) Vulkan swapchain initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:120) Vulkan renderpass initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:130) Vulkan graphics command pool initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:140) Vulkan graphics command buffers initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:150) Vulkan swapchain framebuffers initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:157) Vulkan sync structures initialized successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:164) Vulkan builtin shaders initialized successfully !
+[DEBUG] (engine/entry.rs:52) Renderer initialized
+[DEBUG] (engine/entry.rs:116) Engine initialized
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1124, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1147, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1169, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1192, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1214, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1237, height=1476
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1259, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1237, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1214, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1192, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1169, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1147, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1124, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1101, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1079, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:461) Found suboptimal swapchain when presenting swapchain: swapchain recreation...
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1056, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1034, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1011, height=1476
+[WARNING] (engine/platforms/platform_linux.rs:633) Unknown keysym: 0
+[WARNING] (engine/platforms/platform_linux.rs:633) Unknown keysym: 0
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1237, height=1476
+[WARNING] (engine/renderer/vulkan/vulkan_init/swapchain.rs:416) Found suboptimal swapchain when acquiring next image index: swapchain recreation...
+[WARNING] (engine/renderer/renderer_frontend.rs:96) Could not begin the frame, skipping it
+[INFO] (engine/core/application/event_listeners/on_resize.rs:38) Window resized, new size: width=1011, height=1476
+[WARNING] (engine/platforms/platform_linux.rs:633) Unknown keysym: 0
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:177) Vulkan builtin shaders shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:184) Vulkan sync structures shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:194) Vulkan swapchain framebuffers shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:204) Vulkan graphics command buffers shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:214) Vulkan graphics command pool shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:221) Vulkan renderpass shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:228) Vulkan swapchain shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:238) Vulkan logical device queues shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:245) Vulkan logical device shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:252) Vulkan physical device shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:262) Vulkan device requirements shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:269) Vulkan surface shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:278) Vulkan debugger shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:286) Vulkan instance shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:293) Vulkan allocator shutted down successfully !
+[DEBUG] (engine/renderer/vulkan/vulkan_init/mod.rs:300) Vulkan entry shutted down successfully !
+[DEBUG] (engine/entry.rs:80) Renderer shutted down
+[DEBUG] (engine/entry.rs:86) Application shutted down
+[DEBUG] (engine/entry.rs:92) Game shutted down
+[DEBUG] (engine/core/systems/mod.rs:49) Input subsystem shutted down
+[DEBUG] (engine/core/systems/mod.rs:58) Events subsystem shutted down

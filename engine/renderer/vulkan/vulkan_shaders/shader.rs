@@ -44,10 +44,7 @@ impl Shader {
         let mut spv_file = match std::fs::File::open(spv_path.clone()) {
             Ok(file) => file,
             Err(err) => {
-                error!(
-                    "Failed to open the vulkan shader {:?}: {:?}",
-                    spv_path, err
-                );
+                error!("Failed to open the vulkan shader {:?}: {:?}", spv_path, err);
                 return Err(EngineError::InitializationFailed);
             }
         };
@@ -55,10 +52,7 @@ impl Shader {
         let spv_code = match read_spv(&mut spv_file) {
             Ok(code) => code,
             Err(err) => {
-                error!(
-                    "Failed to read the vulkan shader {:?}: {:?}",
-                    spv_path, err
-                );
+                error!("Failed to read the vulkan shader {:?}: {:?}", spv_path, err);
                 return Err(EngineError::InitializationFailed);
             }
         };
