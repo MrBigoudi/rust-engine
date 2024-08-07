@@ -5,13 +5,16 @@ use ash::{
     Device, Entry, Instance,
 };
 
-use super::{vulkan_init::{
-    command_buffer::CommandBuffer,
-    devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
-    renderpass::Renderpass,
-    swapchain::Swapchain,
-    sync_structures::SyncStructure,
-}, vulkan_shaders::builtin_shaders::BuiltinShaders};
+use super::{
+    vulkan_init::{
+        command_buffer::CommandBuffer,
+        devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
+        renderpass::Renderpass,
+        swapchain::Swapchain,
+        sync_structures::SyncStructure,
+    },
+    vulkan_shaders::builtin_shaders::BuiltinShaders,
+};
 
 #[derive(Default)]
 pub(crate) struct VulkanContext<'a> {

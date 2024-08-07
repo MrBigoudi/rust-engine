@@ -82,8 +82,10 @@ fn main() {
     copy_assets();
 
     // Specify the list of shaders and their entry points
-    // let shaders = vec![("src/shaders/raytracing.slang", "main")];
-    let shaders = vec![];
+    let shaders = vec![
+        ("assets/shaders/builtin/object.vert.slang", "main"),
+        ("assets/shaders/builtin/object.frag.slang", "main"),
+    ];
     compile_shaders(shaders);
 
     // rerun when shaders change

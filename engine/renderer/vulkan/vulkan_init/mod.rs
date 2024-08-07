@@ -11,10 +11,10 @@ pub mod entry;
 pub mod framebuffer;
 pub mod instance;
 pub mod renderpass;
+pub mod shaders;
 pub mod surface;
 pub mod swapchain;
 pub mod sync_structures;
-pub mod shaders;
 
 impl VulkanRendererBackend<'_> {
     pub fn vulkan_init(
