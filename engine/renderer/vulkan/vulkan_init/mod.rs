@@ -14,6 +14,7 @@ pub mod renderpass;
 pub mod surface;
 pub mod swapchain;
 pub mod sync_structures;
+pub mod shaders;
 
 impl VulkanRendererBackend<'_> {
     pub fn vulkan_init(
@@ -156,17 +157,31 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan sync structures initialized successfully !");
         }
 
+        if let Err(err) = self.builtin_shaders_init() {
+            error!("Failed to initialize the vulkan builtin shaders: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan builtin shaders initialized successfully !");
+        }
+
         Ok(())
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
         self.device_wait_idle()?;
 
+        if let Err(err) = self.builtin_shaders_shutdown() {
+            error!("Failed to shutdown the vulkan builtin shaders: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        } else {
+            debug!("Vulkan builtin shaders shutted down successfully !");
+        }
+
         if let Err(err) = self.sync_structures_shutdown() {
             error!("Failed to shutdown the vulkan sync structures: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan sync structures shutdowned successfully !");
+            debug!("Vulkan sync structures shutted down successfully !");
         }
 
         if let Err(err) = self.swapchain_framebuffers_shutdown() {
@@ -176,7 +191,7 @@ impl VulkanRendererBackend<'_> {
             );
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan swapchain framebuffers shutdowned successfully !");
+            debug!("Vulkan swapchain framebuffers shutted down successfully !");
         }
 
         if let Err(err) = self.graphics_command_buffers_shutdown() {
@@ -186,7 +201,7 @@ impl VulkanRendererBackend<'_> {
             );
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan graphics command buffers shutdowned successfully !");
+            debug!("Vulkan graphics command buffers shutted down successfully !");
         }
 
         if let Err(err) = self.graphics_command_pool_shutdown() {
@@ -196,21 +211,21 @@ impl VulkanRendererBackend<'_> {
             );
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan graphics command pool shutdowned successfully !");
+            debug!("Vulkan graphics command pool shutted down successfully !");
         }
 
         if let Err(err) = self.renderpass_shutdown() {
             error!("Failed to shutdown the vulkan renderpass: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan renderpass shutdowned successfully !");
+            debug!("Vulkan renderpass shutted down successfully !");
         }
 
         if let Err(err) = self.swapchain_shutdown() {
             error!("Failed to shutdown the vulkan swapchain: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan swapchain shutdowned successfully !");
+            debug!("Vulkan swapchain shutted down successfully !");
         }
 
         if let Err(err) = self.queues_shutdown() {
@@ -220,21 +235,21 @@ impl VulkanRendererBackend<'_> {
             );
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan logical device queues shutdowned successfully !");
+            debug!("Vulkan logical device queues shutted down successfully !");
         }
 
         if let Err(err) = self.device_shutdown() {
             error!("Failed to shutdown the vulkan logical device: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan logical device shutdowned successfully !");
+            debug!("Vulkan logical device shutted down successfully !");
         }
 
         if let Err(err) = self.physical_device_shutdown() {
             error!("Failed to shutdown the vulkan physical device: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan physical device shutdowned successfully !");
+            debug!("Vulkan physical device shutted down successfully !");
         }
 
         if let Err(err) = self.device_requirements_shutdown() {
@@ -244,14 +259,14 @@ impl VulkanRendererBackend<'_> {
             );
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan device requirements shutdowned successfully !");
+            debug!("Vulkan device requirements shutted down successfully !");
         }
 
         if let Err(err) = self.surface_shutdown() {
             error!("Failed to shutdown the vulkan surface: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan surface shutdowned successfully !");
+            debug!("Vulkan surface shutted down successfully !");
         }
 
         #[cfg(debug_assertions)]
@@ -260,7 +275,7 @@ impl VulkanRendererBackend<'_> {
                 error!("Failed to shutdown the vulkan debugger: {:?}", err);
                 return Err(EngineError::ShutdownFailed);
             } else {
-                debug!("Vulkan debugger shutdowned successfully !");
+                debug!("Vulkan debugger shutted down successfully !");
             }
         }
 
@@ -268,21 +283,21 @@ impl VulkanRendererBackend<'_> {
             error!("Failed to shutdown the vulkan instance: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan instance shutdowned successfully !");
+            debug!("Vulkan instance shutted down successfully !");
         }
 
         if let Err(err) = self.allocator_shutdown() {
             error!("Failed to shutdown the vulkan allocator: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan allocator shutdowned successfully !");
+            debug!("Vulkan allocator shutted down successfully !");
         }
 
         if let Err(err) = self.entry_shutdown() {
             error!("Failed to shutdown the vulkan entry: {:?}", err);
             return Err(EngineError::ShutdownFailed);
         } else {
-            debug!("Vulkan entry shutdowned successfully !");
+            debug!("Vulkan entry shutted down successfully !");
         }
 
         Ok(())
