@@ -1,6 +1,6 @@
 use crate::{core::debug::errors::EngineError, debug, error, platforms::platform::Platform};
 
-use super::vulkan_types::VulkanRendererBackend;
+use super::{vulkan_types::VulkanRendererBackend, vulkan_utils::buffer::BufferCommandParameters};
 
 pub mod allocator;
 pub mod command_buffer;
@@ -171,6 +171,47 @@ impl VulkanRendererBackend<'_> {
         } else {
             debug!("Vulkan objects buffers initialized successfully !");
         }
+
+        // TODO: temporary test code
+        {
+            let mut vertices = vec![
+                glam::Vec3::new(0.0, -0.5, 0.0),
+                glam::Vec3::new(0.5, 0.5, 0.0),
+                glam::Vec3::new(0.0, 0.5, 0.0),
+                glam::Vec3::new(0.5, -0.5, 0.0),
+            ];
+            let mut indices: Vec<u32> = vec![0, 1, 2, 0, 3, 1];
+            let vertices_command_parameters = BufferCommandParameters {
+                command_pool: self.get_graphics_command_pool()?,
+                fence: &ash::vk::Fence::null(),
+                queue: self.get_queues()?.graphics_queue.unwrap(),
+            };
+            let vertices_buffer = &self.get_objects_buffers()?.vertex_buffer;
+            let vertices_size = size_of::<glam::Vec3>() * vertices.len();
+            self.upload_data_range(
+                vertices_command_parameters,
+                &vertices_buffer,
+                0,
+                vertices_size,
+                vertices.as_mut_ptr() as *mut std::ffi::c_void,
+            )?;
+
+            let indices_command_parameters = BufferCommandParameters {
+                command_pool: self.get_graphics_command_pool()?,
+                fence: &ash::vk::Fence::null(),
+                queue: self.get_queues()?.graphics_queue.unwrap(),
+            };
+            let indices_buffer = &self.get_objects_buffers()?.index_buffer;
+            let indices_size = size_of::<u32>() * indices.len();
+            self.upload_data_range(
+                indices_command_parameters,
+                &indices_buffer,
+                0,
+                indices_size,
+                indices.as_mut_ptr() as *mut std::ffi::c_void,
+            )?;
+        }
+        // TODO: end temp code
 
         Ok(())
     }

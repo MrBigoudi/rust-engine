@@ -1,7 +1,7 @@
 use std::ffi::c_void;
 
 use ash::vk::{
-    self, BufferCopy, BufferCreateInfo, BufferUsageFlags, CommandPool, DeviceMemory,
+    self, BufferCopy, BufferCreateInfo, BufferUsageFlags, CommandPool, DeviceMemory, Fence,
     MemoryAllocateInfo, MemoryMapFlags, MemoryPropertyFlags, Queue, SharingMode,
 };
 
@@ -22,11 +22,17 @@ pub(crate) struct Buffer {
     pub memory_flags: MemoryPropertyFlags,
 }
 
-pub(crate) struct CopyBufferParameters<'a> {
+pub(crate) struct BufferCopyParameters<'a> {
     pub src_buffer: &'a Buffer,
     pub src_offset: u64,
     pub dst_buffer: &'a Buffer,
     pub dst_offset: u64,
+}
+
+pub(crate) struct BufferCommandParameters<'a> {
+    pub command_pool: &'a CommandPool,
+    pub fence: &'a Fence,
+    pub queue: Queue,
 }
 
 #[derive(Default)]
@@ -197,9 +203,8 @@ impl VulkanRendererBackend<'_> {
 
     pub(crate) fn copy_buffer_to(
         &self,
-        command_pool: &CommandPool,
-        queue: Queue,
-        copy_parameters: CopyBufferParameters<'_>,
+        command_parameters: BufferCommandParameters<'_>,
+        copy_parameters: BufferCopyParameters<'_>,
         size: usize,
     ) -> Result<(), EngineError> {
         self.device_wait_idle()?;
@@ -210,7 +215,8 @@ impl VulkanRendererBackend<'_> {
 
         // Create a one-time-use command buffer
         let device = self.get_device()?;
-        let command_buffer = CommandBuffer::allocate_and_begin_single_use(device, command_pool)?;
+        let command_buffer =
+            CommandBuffer::allocate_and_begin_single_use(device, command_parameters.command_pool)?;
 
         // Prepare the copy command and add it to the command buffer
         let copy_regions = [BufferCopy::default()
@@ -228,7 +234,11 @@ impl VulkanRendererBackend<'_> {
         }
 
         // Submit the buffer for execution and wait for it to complete
-        command_buffer.end_single_use(device, command_pool, queue)?;
+        command_buffer.end_single_use(
+            device,
+            command_parameters.command_pool,
+            command_parameters.queue,
+        )?;
         Ok(())
     }
 
@@ -236,8 +246,7 @@ impl VulkanRendererBackend<'_> {
         &self,
         buffer: Buffer,
         new_size: usize,
-        queue: Queue,
-        command_pool: &CommandPool,
+        command_parameters: BufferCommandParameters<'_>,
     ) -> Result<Buffer, EngineError> {
         // Create new buffer
         let buffer_create_info = BufferCreateInfo::default()
@@ -298,13 +307,13 @@ impl VulkanRendererBackend<'_> {
             buffer_usage_flags: buffer.buffer_usage_flags,
             memory_flags: buffer.memory_flags,
         };
-        let copy_parameters = CopyBufferParameters {
+        let copy_parameters = BufferCopyParameters {
             src_buffer: &buffer,
             src_offset: 0,
             dst_buffer: &new_buffer,
             dst_offset: 0,
         };
-        self.copy_buffer_to(command_pool, queue, copy_parameters, buffer.total_size)?;
+        self.copy_buffer_to(command_parameters, copy_parameters, buffer.total_size)?;
 
         // Make sure anything potentially using these is finished
         self.device_wait_idle()?;
@@ -313,5 +322,42 @@ impl VulkanRendererBackend<'_> {
         self.destroy_buffer(&buffer)?;
 
         Ok(new_buffer)
+    }
+
+    pub(crate) fn upload_data_range(
+        &self,
+        command_parameters: BufferCommandParameters<'_>,
+        buffer: &Buffer,
+        offset: u64,
+        size: usize,
+        data: *mut c_void,
+    ) -> Result<(), EngineError> {
+        // Create a host-visible staging buffer to upload to
+        // Mark it as the source of the transfer
+        let staging_buffer_memory_flags =
+            MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT;
+        let staging_buffer_create_params = BufferCreatorParameters::default()
+            .memory_flags(staging_buffer_memory_flags)
+            .size(size)
+            .buffer_usage_flags(BufferUsageFlags::TRANSFER_SRC)
+            .should_be_bind(true);
+        let staging_buffer = self.create_buffer(staging_buffer_create_params)?;
+
+        // Load the data into the staging buffer
+        self.load_data_into_buffer(&staging_buffer, offset, size, MemoryMapFlags::empty(), data)?;
+
+        // Perform the copy from staging to the device local buffer
+        let copy_parameters = BufferCopyParameters {
+            src_buffer: &staging_buffer,
+            src_offset: 0,
+            dst_buffer: buffer,
+            dst_offset: offset,
+        };
+        self.copy_buffer_to(command_parameters, copy_parameters, size)?;
+
+        // Clean up the staging buffer
+        self.destroy_buffer(&staging_buffer)?;
+
+        Ok(())
     }
 }

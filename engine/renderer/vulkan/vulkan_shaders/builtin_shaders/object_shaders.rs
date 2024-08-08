@@ -1,7 +1,7 @@
 use ash::{
     vk::{
-        self, Extent2D, Format, Offset2D, PipelineShaderStageCreateInfo, Rect2D, ShaderStageFlags,
-        VertexInputAttributeDescription, Viewport,
+        self, Extent2D, Format, Offset2D, PipelineBindPoint, PipelineShaderStageCreateInfo, Rect2D,
+        ShaderStageFlags, VertexInputAttributeDescription, Viewport,
     },
     Device,
 };
@@ -9,6 +9,7 @@ use ash::{
 use crate::{
     core::debug::errors::EngineError,
     renderer::vulkan::{
+        vulkan_init::command_buffer::CommandBuffer,
         vulkan_shaders::shader::Shader,
         vulkan_types::VulkanRendererBackend,
         vulkan_utils::pipeline::{Pipeline, PipelineCreateInfo},
@@ -123,6 +124,12 @@ impl ObjectShaders {
         self.pipeline.destroy(device, allocator)?;
         self.vertex_stage.destroy(device, allocator)?;
         self.fragment_stage.destroy(device, allocator)?;
+        Ok(())
+    }
+
+    pub fn run(&self, device: &Device, command_buffer: &CommandBuffer) -> Result<(), EngineError> {
+        let pipeline = &self.pipeline;
+        pipeline.bind(device, command_buffer, PipelineBindPoint::GRAPHICS)?;
         Ok(())
     }
 }

@@ -5,6 +5,6 @@ struct FSOutput {
 [shader("fragment")]
 FSOutput main() {
     FSOutput output;
-    output.colour = float4(1.0, 1.0, 1.0, 1.0);
+    output.colour = float4(0.0, 1.0, 0.0, 1.0);
     return output;
 }

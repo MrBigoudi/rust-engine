@@ -86,6 +86,41 @@ impl RendererBackend for VulkanRendererBackend<'_> {
         let device = self.get_device()?;
         unsafe { device.cmd_set_scissor(*command_buffer.handler.as_ref(), 0, &scissor) };
 
+        // TODO: temporary test code
+        {
+            let object_shaders = &self.get_builtin_shaders()?.object_shaders;
+            let image_index = self.context.image_index as usize;
+            let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
+            let device = self.get_device()?;
+            object_shaders.run(device, &command_buffer)?;
+            // Bind vertex buffer at offset
+            let offsets = [0];
+            let vertex_buffer = [self.get_objects_buffers()?.vertex_buffer.buffer];
+            unsafe {
+                device.cmd_bind_vertex_buffers(
+                    *command_buffer.handler.as_ref(),
+                    0,
+                    &vertex_buffer,
+                    &offsets,
+                );
+            }
+            // Bind index buffer at offset
+            let index_buffer = self.get_objects_buffers()?.index_buffer.buffer;
+            unsafe {
+                device.cmd_bind_index_buffer(
+                    *command_buffer.handler.as_ref(),
+                    index_buffer,
+                    0,
+                    ash::vk::IndexType::UINT32,
+                );
+            }
+            // Issue the draw
+            unsafe {
+                device.cmd_draw_indexed(*command_buffer.handler.as_ref(), 6, 1, 0, 0, 0);
+            }
+        }
+        // TODO: end temporary test code
+
         Ok(true)
     }
 
