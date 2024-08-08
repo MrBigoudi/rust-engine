@@ -105,7 +105,6 @@ impl ObjectShaders {
         )?;
 
         // Descriptors
-        // TODO: create a pipeline
         let pipeline_info = Self::create_pipeline_info(backend, &vertex_stage, &fragment_stage)?;
         let pipeline = Pipeline::create_graphics(device, allocator, pipeline_info)?;
 

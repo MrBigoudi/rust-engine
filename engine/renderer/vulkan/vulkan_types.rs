@@ -9,6 +9,7 @@ use super::{
     vulkan_init::{
         command_buffer::CommandBuffer,
         devices::{device_requirements::DeviceRequirements, physical_device::PhysicalDeviceInfo},
+        objects::ObjectsBuffers,
         renderpass::Renderpass,
         swapchain::Swapchain,
         sync_structures::SyncStructure,
@@ -47,6 +48,8 @@ pub(crate) struct VulkanContext<'a> {
     pub sync_structures: Option<SyncStructure>,
 
     pub builtin_shaders: Option<BuiltinShaders>,
+
+    pub objects: Option<ObjectsBuffers>,
 }
 
 #[derive(Default)]

@@ -10,6 +10,7 @@ pub mod devices;
 pub mod entry;
 pub mod framebuffer;
 pub mod instance;
+pub mod objects;
 pub mod renderpass;
 pub mod shaders;
 pub mod surface;
@@ -164,11 +165,25 @@ impl VulkanRendererBackend<'_> {
             debug!("Vulkan builtin shaders initialized successfully !");
         }
 
+        if let Err(err) = self.objects_buffers_init() {
+            error!("Failed to initialize the vulkan objects buffers: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan objects buffers initialized successfully !");
+        }
+
         Ok(())
     }
 
     pub fn vulkan_shutdown(&mut self) -> Result<(), EngineError> {
         self.device_wait_idle()?;
+
+        if let Err(err) = self.objects_buffers_shutdown() {
+            error!("Failed to shutdown the vulkan objects buffers: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        } else {
+            debug!("Vulkan objects buffers shutted down successfully !");
+        }
 
         if let Err(err) = self.builtin_shaders_shutdown() {
             error!("Failed to shutdown the vulkan builtin shaders: {:?}", err);
