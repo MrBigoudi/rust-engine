@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{ffi::CString, path::Path};
 
 use ash::{
     util::read_spv,
@@ -11,7 +11,7 @@ use crate::{core::debug::errors::EngineError, error};
 pub(crate) struct Shader {
     pub shader_module: ShaderModule,
     pub stage_flag: ShaderStageFlags,
-    pub entry_point: String,
+    pub entry_point: CString,
 }
 
 impl Shader {
@@ -73,8 +73,26 @@ impl Shader {
         };
 
         let entry_point = match shader_entry_point {
-            Some(entry) => String::from(entry),
-            None => String::from("main"),
+            Some(entry) => match CString::new(entry) {
+                Ok(str) => str,
+                Err(err) => {
+                    error!(
+                        "Failed to get the name of a vulkan shader entry point {:?}: {:?}",
+                        spv_path, err
+                    );
+                    return Err(EngineError::InvalidValue);
+                }
+            },
+            None => match CString::new("main") {
+                Ok(str) => str,
+                Err(err) => {
+                    error!(
+                        "Failed to get the name of a vulkan shader entry point {:?}: {:?}",
+                        spv_path, err
+                    );
+                    return Err(EngineError::InvalidValue);
+                }
+            },
         };
 
         Ok(Shader {

@@ -20,7 +20,7 @@ impl VulkanRendererBackend<'_> {
     pub fn builtin_shaders_init(&mut self) -> Result<(), EngineError> {
         let device = self.get_device()?;
         let allocator = self.get_allocator()?;
-        self.context.builtin_shaders = Some(BuiltinShaders::create(device, allocator)?);
+        self.context.builtin_shaders = Some(BuiltinShaders::create(self)?);
         Ok(())
     }
 
