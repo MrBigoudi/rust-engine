@@ -27,6 +27,8 @@ pub(crate) trait RendererBackend {
         mode: i32,
     ) -> Result<(), EngineError>;
 
+    fn update_object(&mut self, model: glam::Mat4) -> Result<(), EngineError>;
+
     fn get_aspect_ratio(&self) -> Result<f32, EngineError>;
 }
 

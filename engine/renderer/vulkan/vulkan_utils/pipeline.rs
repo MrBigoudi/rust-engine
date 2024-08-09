@@ -1,15 +1,6 @@
 use ash::{
     vk::{
-        self, BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags,
-        DescriptorSetLayout, DynamicState, FrontFace, GraphicsPipelineCreateInfo, LogicOp,
-        PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
-        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
-        PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout,
-        PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo,
-        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo,
-        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
-        PrimitiveTopology, Rect2D, SampleCountFlags, VertexInputAttributeDescription,
-        VertexInputBindingDescription, VertexInputRate, Viewport,
+        self, BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags, DescriptorSetLayout, DynamicState, FrontFace, GraphicsPipelineCreateInfo, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, PushConstantRange, Rect2D, SampleCountFlags, ShaderStageFlags, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport
     },
     Device,
 };
@@ -108,9 +99,18 @@ impl Pipeline {
         let input_assembly_create_info = PipelineInputAssemblyStateCreateInfo::default()
             .topology(PrimitiveTopology::TRIANGLE_LIST);
 
+        // Push constants
+        let push_constant_ranges = [
+            PushConstantRange::default()
+                .stage_flags(ShaderStageFlags::VERTEX) // only push constants to vertex shader
+                .offset(0)
+                .size((size_of::<glam::Mat4>()) as u32), // max size of 128 bytes
+        ];
+
         // Pipeline layout
-        let pipeline_layout_create_info =
-            PipelineLayoutCreateInfo::default().set_layouts(&pipeline_info.descriptor_set_layouts);
+        let pipeline_layout_create_info = PipelineLayoutCreateInfo::default()
+            .set_layouts(&pipeline_info.descriptor_set_layouts)
+            .push_constant_ranges(&push_constant_ranges);
         let pipeline_layout = unsafe {
             match device.create_pipeline_layout(&pipeline_layout_create_info, allocator) {
                 Ok(layout) => layout,
@@ -139,7 +139,8 @@ impl Pipeline {
             .render_pass(pipeline_info.renderpass.handler)
             .subpass(0)
             .base_pipeline_handle(vk::Pipeline::null())
-            .base_pipeline_index(-1)];
+            .base_pipeline_index(-1)
+        ];
 
         let pipeline = unsafe {
             match device.create_graphics_pipelines(

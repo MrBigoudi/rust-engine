@@ -379,4 +379,32 @@ impl VulkanRendererBackend<'_> {
 
         Ok(())
     }
+
+    pub fn update_object_shaders(&mut self, model: glam::Mat4) -> Result<(), EngineError> {
+        let current_frame_index = self.context.current_frame as usize;
+        let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
+        let device = self.get_device()?;
+        let object_shaders = &self.get_builtin_shaders()?.object_shaders;
+
+        // Convert glam::Mat4 into &[u8]
+        let ptr: *const glam::Mat4 = &model;
+        // Convert the raw pointer to a raw pointer to u8
+        let byte_ptr: *const u8 = ptr as *const u8;
+        // Calculate the length of the byte slice (Mat4 is 16 floats, each 4 bytes)
+        let len = size_of::<glam::Mat4>();
+        // Convert the raw pointer into a byte slice
+        let constants = unsafe { std::slice::from_raw_parts(byte_ptr, len) };
+
+        unsafe {
+            device.cmd_push_constants(
+                *command_buffer.handler.as_ref(),
+                object_shaders.pipeline.layout,
+                ShaderStageFlags::VERTEX,
+                0,
+                constants,
+            );
+        }
+
+        Ok(())
+    }
 }

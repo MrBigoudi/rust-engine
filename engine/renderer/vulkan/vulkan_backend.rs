@@ -237,6 +237,25 @@ impl RendererBackend for VulkanRendererBackend<'_> {
             return Err(EngineError::UpdateFailed);
         }
 
+        Ok(())
+    }
+
+    fn get_aspect_ratio(&self) -> Result<f32, EngineError> {
+        let width = self.get_swapchain()?.extent.width as f32;
+        let height = self.get_swapchain()?.extent.width as f32;
+        Ok(width / height)
+    }
+
+    fn update_object(&mut self, model: glam::Mat4) -> Result<(), EngineError> {
+        let current_frame_index = self.context.current_frame as usize;
+        if let Err(err) = self.update_object_shaders(model) {
+            error!(
+                "Failed to update the vulkan object shaders when updating the vulkan objects: {:?}",
+                err
+            );
+            return Err(EngineError::UpdateFailed);
+        }
+
         // TODO: temporary test code
         {
             let object_shaders = &self.get_builtin_shaders()?.object_shaders;
@@ -272,11 +291,5 @@ impl RendererBackend for VulkanRendererBackend<'_> {
         }
         // TODO: end temporary test code
         Ok(())
-    }
-
-    fn get_aspect_ratio(&self) -> Result<f32, EngineError> {
-        let width = self.get_swapchain()?.extent.width as f32;
-        let height = self.get_swapchain()?.extent.width as f32;
-        Ok(width / height)
     }
 }

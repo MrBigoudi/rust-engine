@@ -106,6 +106,16 @@ impl RendererFrontend {
                         glam::Vec4::ONE,
                         0,
                     )?;
+
+                    // mat4 model = mat4_translation((vec3){0, 0, 0});
+                    static mut ANGLE: f32 = 0.01;
+                    unsafe { ANGLE += 0.001 };
+                    let rotation =
+                        glam::Quat::from_axis_angle(glam::Vec3::new(0.0, 0.0, -1.0), unsafe {
+                            ANGLE
+                        });
+                    let model = glam::Mat4::from_quat(rotation);
+                    self.backend.as_mut().unwrap().update_object(model)?;
                 }
                 // TODO: temporary test code
 
