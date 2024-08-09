@@ -83,6 +83,33 @@ impl RendererFrontend {
                 Err(EngineError::Unknown)
             }
             Ok(true) => {
+                // TODO: temporary test code
+                {
+                    let projection = glam::Mat4::perspective_lh(
+                        (45f32).to_radians(),
+                        self.backend.as_ref().unwrap().get_aspect_ratio()?,
+                        0.1,
+                        1000.0,
+                    );
+                    static mut Z: f32 = -1.0;
+                    unsafe { Z -= 0.005 };
+                    let view = glam::Mat4::from_translation(glam::Vec3 {
+                        x: 0.0,
+                        y: 0.0,
+                        z: unsafe { Z },
+                    });
+                    // debug!("proj: {:?}\nview: {:?}\n\n", projection, view);
+                    self.backend.as_mut().unwrap().update_global_state(
+                        // projection,
+                        glam::Mat4::IDENTITY,
+                        view.transpose(),
+                        glam::Vec3::ZERO,
+                        glam::Vec4::ONE,
+                        0,
+                    )?;
+                }
+                // TODO: temporary test code
+
                 // End the frame. If this fails, it is likely unrecoverable
                 match self.end_frame(frame_data.delta_time) {
                     Err(err) => {

@@ -174,11 +174,12 @@ impl VulkanRendererBackend<'_> {
 
         // TODO: temporary test code
         {
+            let factor = 10.0;
             let mut vertices = vec![
-                glam::Vec3::new(0.0, -0.5, 0.0),
-                glam::Vec3::new(0.5, 0.5, 0.0),
-                glam::Vec3::new(0.0, 0.5, 0.0),
-                glam::Vec3::new(0.5, -0.5, 0.0),
+                glam::Vec3::new(-0.5 * factor, -0.5 * factor, 0.0),
+                glam::Vec3::new(0.5 * factor, 0.5 * factor, 0.0),
+                glam::Vec3::new(-0.5 * factor, 0.5 * factor, 0.0),
+                glam::Vec3::new(0.5 * factor, -0.5 * factor, 0.0),
             ];
             let mut indices: Vec<u32> = vec![0, 1, 2, 0, 3, 1];
             let vertices_command_parameters = BufferCommandParameters {
@@ -190,7 +191,7 @@ impl VulkanRendererBackend<'_> {
             let vertices_size = size_of::<glam::Vec3>() * vertices.len();
             self.upload_data_range(
                 vertices_command_parameters,
-                &vertices_buffer,
+                vertices_buffer,
                 0,
                 vertices_size,
                 vertices.as_mut_ptr() as *mut std::ffi::c_void,
@@ -205,7 +206,7 @@ impl VulkanRendererBackend<'_> {
             let indices_size = size_of::<u32>() * indices.len();
             self.upload_data_range(
                 indices_command_parameters,
-                &indices_buffer,
+                indices_buffer,
                 0,
                 indices_size,
                 indices.as_mut_ptr() as *mut std::ffi::c_void,

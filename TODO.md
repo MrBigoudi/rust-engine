@@ -1,5 +1,5 @@
 # TODO list
 
-- window resizing
-- draw frame
+- fix projection/view matrices
 - change elements visibility/rights
+- better error handling (add messages instead of ?)

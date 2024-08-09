@@ -11,8 +11,9 @@ use crate::{
 
 pub(crate) struct ObjectsBuffers {
     pub vertex_buffer: Buffer,
-    pub index_buffer: Buffer,
     pub vertex_offset: u64,
+
+    pub index_buffer: Buffer,
     pub index_offset: u64,
 }
 
@@ -26,7 +27,16 @@ impl VulkanRendererBackend<'_> {
             .buffer_usage_flags(transfer_flags | BufferUsageFlags::VERTEX_BUFFER)
             .memory_flags(MemoryPropertyFlags::DEVICE_LOCAL)
             .should_be_bind(true);
-        let vertex_buffer = self.create_buffer(vertex_buffer_creator_parameters)?;
+        let vertex_buffer = match self.create_buffer(vertex_buffer_creator_parameters) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                error!(
+                    "Failed to create the vertex buffer in the vulkan objects buffer: {:?}",
+                    err
+                );
+                return Err(EngineError::InitializationFailed);
+            }
+        };
         let vertex_offset = 0;
 
         // Index buffer
@@ -36,7 +46,16 @@ impl VulkanRendererBackend<'_> {
             .buffer_usage_flags(transfer_flags | BufferUsageFlags::INDEX_BUFFER)
             .memory_flags(MemoryPropertyFlags::DEVICE_LOCAL)
             .should_be_bind(true);
-        let index_buffer = self.create_buffer(index_buffer_creator_parameters)?;
+        let index_buffer = match self.create_buffer(index_buffer_creator_parameters) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                error!(
+                    "Failed to create the index buffer in the vulkan objects buffer: {:?}",
+                    err
+                );
+                return Err(EngineError::InitializationFailed);
+            }
+        };
         let index_offset = 0;
 
         self.context.objects = Some(ObjectsBuffers {
@@ -60,8 +79,20 @@ impl VulkanRendererBackend<'_> {
 
     pub fn objects_buffers_shutdown(&mut self) -> Result<(), EngineError> {
         let objects_buffers = self.get_objects_buffers()?;
-        self.destroy_buffer(&objects_buffers.index_buffer)?;
-        self.destroy_buffer(&objects_buffers.vertex_buffer)?;
+        if let Err(err) = self.destroy_buffer(&objects_buffers.index_buffer) {
+            error!(
+                "Failed to destroy the index buffer of the vulkan objects: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
+        if let Err(err) = self.destroy_buffer(&objects_buffers.vertex_buffer) {
+            error!(
+                "Failed to destroy the vertex buffer of the vulkan objects: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
         Ok(())
     }
 }

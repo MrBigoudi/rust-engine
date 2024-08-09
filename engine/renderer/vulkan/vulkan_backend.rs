@@ -25,7 +25,13 @@ impl RendererBackend for VulkanRendererBackend<'_> {
 
     fn begin_frame(&mut self, delta_time: f64) -> Result<bool, EngineError> {
         if self.context.has_framebuffer_been_resized {
-            self.swapchain_recreate()?;
+            if let Err(err) = self.swapchain_recreate() {
+                error!(
+                    "Failed to recreate the vulkan swapchain when beginning a new frame: {:?}",
+                    err
+                );
+                return Err(EngineError::Unknown);
+            }
             self.context.has_framebuffer_been_resized = false;
             return Ok(false);
         }
@@ -36,7 +42,13 @@ impl RendererBackend for VulkanRendererBackend<'_> {
             &self.get_sync_structures()?.in_flight_fences[current_frame_index];
         let device = self.get_device()?;
         let timeout = u64::MAX;
-        current_image_fence.wait(device, timeout)?;
+        if let Err(err) = current_image_fence.wait(device, timeout) {
+            error!(
+                "Failed to wait for the current image fence when beginning a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::Unknown);
+        }
 
         // Acquire the next image from the swap chain. Pass along the semaphore that should signaled when this completes
         // This same semaphore will later be waited on by the queue submission to ensure this image is available
@@ -48,24 +60,51 @@ impl RendererBackend for VulkanRendererBackend<'_> {
         if let Some(index) = next_image_index {
             self.context.image_index = index;
         } else {
-            self.swapchain_recreate()?;
+            if let Err(err) = self.swapchain_recreate() {
+                error!("Failed to recreate the vulkan swapchain when acquiring a wrong image at the beginning of a new frame: {:?}", err);
+                return Err(EngineError::InitializationFailed);
+            }
             return Ok(false);
         }
         let current_image_fence =
             &self.get_sync_structures()?.in_flight_fences[current_frame_index];
         let device = self.get_device()?;
-        current_image_fence.reset(device)?;
+        if let Err(err) = current_image_fence.reset(device) {
+            error!(
+                "Failed to reset the current image fence when beginning a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        }
 
         // Begin recording commands
         let command_buffer = &self.context.graphics_command_buffers[current_frame_index];
         let device = self.get_device()?;
-        command_buffer.reset(device)?;
-        command_buffer.begin(device, false, false, false)?;
+        if let Err(err) = command_buffer.reset(device) {
+            error!(
+                "Failed to reset the current command buffer when beginning a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        }
+        if let Err(err) = command_buffer.begin(device, false, false, false) {
+            error!(
+                "Failed to begin the current command buffer when beginning a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        }
 
         // Begin the render pass
         let image_index = self.context.image_index as usize;
         let framebuffer = &self.get_swapchain()?.framebuffers[image_index];
-        self.renderpass_begin(command_buffer, *framebuffer.handler.as_ref())?;
+        if let Err(err) = self.renderpass_begin(command_buffer, *framebuffer.handler.as_ref()) {
+            error!(
+                "Failed to begin the renderpass when beginning a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        }
 
         // Dynamic viewport
         let render_area = self.get_renderpass()?.render_area;
@@ -86,13 +125,125 @@ impl RendererBackend for VulkanRendererBackend<'_> {
         let device = self.get_device()?;
         unsafe { device.cmd_set_scissor(*command_buffer.handler.as_ref(), 0, &scissor) };
 
+        Ok(true)
+    }
+
+    fn end_frame(&mut self, delta_time: f64) -> Result<(), EngineError> {
+        let current_frame_index = self.context.current_frame as usize;
+
+        // End renderpass
+        let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
+        if let Err(err) = self.renderpass_end(command_buffer) {
+            error!(
+                "Failed to end the renderpass when ending a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
+        let device = self.get_device()?;
+        if let Err(err) = command_buffer.end(device) {
+            error!(
+                "Failed to end the current command buffer when ending a new frame: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
+
+        // Submit the queue and wait for the operation to complete
+        let command_buffers = [*command_buffer.handler.as_ref()];
+        let signal_semaphores =
+            [self.get_sync_structures()?.queue_complete_semaphores[current_frame_index]];
+        let wait_semaphores =
+            [self.get_sync_structures()?.image_available_semaphores[current_frame_index]];
+        let wait_dst_stage_mask = [PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
+        let submit_info = [SubmitInfo::default()
+            .command_buffers(&command_buffers)
+            .signal_semaphores(&signal_semaphores)
+            .wait_semaphores(&wait_semaphores)
+            .wait_dst_stage_mask(&wait_dst_stage_mask)];
+        let current_fence = &self.get_sync_structures()?.in_flight_fences[current_frame_index];
+        let graphics_queue = self.get_queues()?.graphics_queue.unwrap();
+        let device = self.get_device()?;
+        unsafe {
+            if let Err(err) = device.queue_submit(
+                graphics_queue,
+                &submit_info,
+                *current_fence.handler.as_ref(),
+            ) {
+                error!(
+                    "Failed to submit the vulkan graphics queue when ending a new frame: {:?}",
+                    err
+                );
+                return Err(EngineError::VulkanFailed);
+            }
+        }
+
+        // Give the image back to the swapchain.
+        let render_complete_semaphore =
+            self.get_sync_structures()?.queue_complete_semaphores[current_frame_index];
+        match self.swapchain_present(render_complete_semaphore, self.context.image_index) {
+            Ok(Some(())) => (),
+            Ok(None) => self.swapchain_recreate()?,
+            Err(err) => {
+                error!(
+                    "Failed to present the vulkan swapchain when ending a new frame: {:?}",
+                    err
+                );
+                return Err(err);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn increase_frame_number(&mut self) -> Result<(), EngineError> {
+        self.frame_number += 1;
+        Ok(())
+    }
+
+    fn get_frame_number(&self) -> Result<u64, EngineError> {
+        Ok(self.frame_number)
+    }
+
+    fn update_global_state(
+        &mut self,
+        projection: glam::Mat4,
+        view: glam::Mat4,
+        view_position: glam::Vec3,
+        ambient_colour: glam::Vec4,
+        mode: i32,
+    ) -> Result<(), EngineError> {
+        let current_frame_index = self.context.current_frame as usize;
+        let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
+        let device = self.get_device()?;
+
+        let object_shaders = &self.get_builtin_shaders()?.object_shaders;
+        object_shaders.r#use(device, command_buffer)?;
+        let object_shaders = &mut self
+            .context
+            .builtin_shaders
+            .as_mut()
+            .unwrap()
+            .object_shaders;
+        object_shaders.global_ubo.projection = projection;
+        object_shaders.global_ubo.view = view;
+
+        // TODO: other ubo properties
+        if let Err(err) = self.update_object_shaders_global_state() {
+            error!(
+                "Failed to update the vulkan object shaders global state: {:?}",
+                err
+            );
+            return Err(EngineError::UpdateFailed);
+        }
+
         // TODO: temporary test code
         {
             let object_shaders = &self.get_builtin_shaders()?.object_shaders;
             let image_index = self.context.image_index as usize;
             let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
             let device = self.get_device()?;
-            object_shaders.run(device, &command_buffer)?;
+            object_shaders.r#use(device, command_buffer)?;
             // Bind vertex buffer at offset
             let offsets = [0];
             let vertex_buffer = [self.get_objects_buffers()?.vertex_buffer.buffer];
@@ -120,63 +271,12 @@ impl RendererBackend for VulkanRendererBackend<'_> {
             }
         }
         // TODO: end temporary test code
-
-        Ok(true)
-    }
-
-    fn end_frame(&mut self, delta_time: f64) -> Result<(), EngineError> {
-        let current_frame_index = self.context.current_frame as usize;
-
-        // End renderpass
-        let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
-        self.renderpass_end(command_buffer)?;
-        let device = self.get_device()?;
-        command_buffer.end(device)?;
-
-        // Submit the queue and wait for the operation to complete
-        let command_buffers = [*command_buffer.handler.as_ref()];
-        let signal_semaphores =
-            [self.get_sync_structures()?.queue_complete_semaphores[current_frame_index]];
-        let wait_semaphores =
-            [self.get_sync_structures()?.image_available_semaphores[current_frame_index]];
-        let wait_dst_stage_mask = [PipelineStageFlags::COLOR_ATTACHMENT_OUTPUT];
-        let submit_info = [SubmitInfo::default()
-            .command_buffers(&command_buffers)
-            .signal_semaphores(&signal_semaphores)
-            .wait_semaphores(&wait_semaphores)
-            .wait_dst_stage_mask(&wait_dst_stage_mask)];
-        let current_fence = &self.get_sync_structures()?.in_flight_fences[current_frame_index];
-        let graphics_queue = self.get_queues()?.graphics_queue.unwrap();
-        let device = self.get_device()?;
-        unsafe {
-            if let Err(err) = device.queue_submit(
-                graphics_queue,
-                &submit_info,
-                *current_fence.handler.as_ref(),
-            ) {
-                error!("Failed to submit the vulkan graphics queue: {:?}", err);
-                return Err(EngineError::VulkanFailed);
-            }
-        }
-
-        // Give the image back to the swapchain.
-        let render_complete_semaphore =
-            self.get_sync_structures()?.queue_complete_semaphores[current_frame_index];
-        match self.swapchain_present(render_complete_semaphore, self.context.image_index) {
-            Ok(Some(())) => (),
-            Ok(None) => self.swapchain_recreate()?,
-            Err(err) => return Err(err),
-        }
-
         Ok(())
     }
 
-    fn increase_frame_number(&mut self) -> Result<(), EngineError> {
-        self.frame_number += 1;
-        Ok(())
-    }
-
-    fn get_frame_number(&self) -> Result<u64, EngineError> {
-        Ok(self.frame_number)
+    fn get_aspect_ratio(&self) -> Result<f32, EngineError> {
+        let width = self.get_swapchain()?.extent.width as f32;
+        let height = self.get_swapchain()?.extent.width as f32;
+        Ok(width / height)
     }
 }

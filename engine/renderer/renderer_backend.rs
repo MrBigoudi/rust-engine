@@ -17,6 +17,17 @@ pub(crate) trait RendererBackend {
     fn increase_frame_number(&mut self) -> Result<(), EngineError>;
 
     fn get_frame_number(&self) -> Result<u64, EngineError>;
+
+    fn update_global_state(
+        &mut self,
+        projection: glam::Mat4,
+        view: glam::Mat4,
+        view_position: glam::Vec3,
+        ambient_colour: glam::Vec4,
+        mode: i32,
+    ) -> Result<(), EngineError>;
+
+    fn get_aspect_ratio(&self) -> Result<f32, EngineError>;
 }
 
 pub(crate) fn renderer_backend_init(

@@ -126,7 +126,10 @@ impl VulkanRendererBackend<'_> {
         };
 
         if buffer_creation_parameters.should_be_bind {
-            self.bind_buffer(&new_buffer, 0)?;
+            if let Err(err) = self.bind_buffer(&new_buffer, 0) {
+                error!("Failed to bind a newly created vulkan buffer: {:?}", err);
+                return Err(EngineError::InitializationFailed);
+            }
         }
 
         Ok(new_buffer)
@@ -154,7 +157,7 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
-    pub(crate) fn lock_memory_buffer(
+    fn map_memory_buffer(
         &self,
         buffer: &Buffer,
         offset: u64,
@@ -162,8 +165,8 @@ impl VulkanRendererBackend<'_> {
         flags: MemoryMapFlags,
     ) -> Result<*mut c_void, EngineError> {
         let device = self.get_device()?;
-        let allocator = self.get_allocator()?;
         unsafe {
+            // crate::debug!("memory_flags: {:?}", buffer.memory_flags);
             match device.map_memory(buffer.memory, offset, size as u64, flags) {
                 Ok(data) => Ok(data),
                 Err(err) => {
@@ -174,9 +177,8 @@ impl VulkanRendererBackend<'_> {
         }
     }
 
-    pub(crate) fn unlock_memory_buffer(&self, buffer: &Buffer) -> Result<(), EngineError> {
+    fn unmap_memory_buffer(&self, buffer: &Buffer) -> Result<(), EngineError> {
         let device = self.get_device()?;
-        let allocator = self.get_allocator()?;
         unsafe {
             device.unmap_memory(buffer.memory);
         }
@@ -193,11 +195,26 @@ impl VulkanRendererBackend<'_> {
     ) -> Result<(), EngineError> {
         let device = self.get_device()?;
         let allocator = self.get_allocator()?;
-        let space_in_memory = self.lock_memory_buffer(buffer, offset, size, flags)?;
+        let space_in_memory = match self.map_memory_buffer(buffer, offset, size, flags) {
+            Ok(space) => space,
+            Err(err) => {
+                error!(
+                    "Failed to lock memory when loading data into a vulkan buffer: {:?}",
+                    err
+                );
+                return Err(EngineError::InitializationFailed);
+            }
+        };
         unsafe {
             space_in_memory.copy_from(data, size);
         }
-        self.unlock_memory_buffer(buffer)?;
+        if let Err(err) = self.unmap_memory_buffer(buffer) {
+            error!(
+                "Failed to unlock memory when loading data into a vulkan buffer: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        }
         Ok(())
     }
 
@@ -207,7 +224,13 @@ impl VulkanRendererBackend<'_> {
         copy_parameters: BufferCopyParameters<'_>,
         size: usize,
     ) -> Result<(), EngineError> {
-        self.device_wait_idle()?;
+        if let Err(err) = self.device_wait_idle() {
+            error!(
+                "Failed to wait for the device when copying a vulkan buffer: {:?}",
+                err
+            );
+            return Err(EngineError::VulkanFailed);
+        }
         let src_offset = copy_parameters.src_offset;
         let dst_offset = copy_parameters.dst_offset;
         let src_buffer = copy_parameters.src_buffer;
@@ -215,8 +238,19 @@ impl VulkanRendererBackend<'_> {
 
         // Create a one-time-use command buffer
         let device = self.get_device()?;
-        let command_buffer =
-            CommandBuffer::allocate_and_begin_single_use(device, command_parameters.command_pool)?;
+        let command_buffer = match CommandBuffer::allocate_and_begin_single_use(
+            device,
+            command_parameters.command_pool,
+        ) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                error!(
+                    "Failed to create a one time command buffer when copying a vulkan buffer: {:?}",
+                    err
+                );
+                return Err(EngineError::InitializationFailed);
+            }
+        };
 
         // Prepare the copy command and add it to the command buffer
         let copy_regions = [BufferCopy::default()
@@ -234,11 +268,14 @@ impl VulkanRendererBackend<'_> {
         }
 
         // Submit the buffer for execution and wait for it to complete
-        command_buffer.end_single_use(
+        if let Err(err) = command_buffer.end_single_use(
             device,
             command_parameters.command_pool,
             command_parameters.queue,
-        )?;
+        ) {
+            error!("Failed to end the usage of a one time command buffer when copying a vulkan buffer: {:?}", err);
+            return Err(EngineError::InitializationFailed);
+        }
         Ok(())
     }
 
@@ -271,8 +308,18 @@ impl VulkanRendererBackend<'_> {
 
         // Gather memory requirements
         let memory_requirements = unsafe { device.get_buffer_memory_requirements(buffer.buffer) };
-        let memory_index = self
-            .device_find_memory_index(memory_requirements.memory_type_bits, buffer.memory_flags)?;
+        let memory_index = match self
+            .device_find_memory_index(memory_requirements.memory_type_bits, buffer.memory_flags)
+        {
+            Ok(index) => index,
+            Err(err) => {
+                error!(
+                    "Failed to get the memory index when resizing a vulkan buffer: {:?}",
+                    err
+                );
+                return Err(EngineError::InvalidValue);
+            }
+        };
         // Allocate memory info
         let memory_allocate_info = MemoryAllocateInfo::default()
             .allocation_size(memory_requirements.size)
@@ -313,13 +360,33 @@ impl VulkanRendererBackend<'_> {
             dst_buffer: &new_buffer,
             dst_offset: 0,
         };
-        self.copy_buffer_to(command_parameters, copy_parameters, buffer.total_size)?;
+        if let Err(err) =
+            self.copy_buffer_to(command_parameters, copy_parameters, buffer.total_size)
+        {
+            error!(
+                "Failed to copy a buffer when resizing a vulkan buffer: {:?}",
+                err
+            );
+            return Err(EngineError::Unknown);
+        }
 
         // Make sure anything potentially using these is finished
-        self.device_wait_idle()?;
+        if let Err(err) = self.device_wait_idle() {
+            error!(
+                "Failed to wait for the device when resizing a vulkan buffer: {:?}",
+                err
+            );
+            return Err(EngineError::VulkanFailed);
+        }
 
         // Destroy the old
-        self.destroy_buffer(&buffer)?;
+        if let Err(err) = self.destroy_buffer(&buffer) {
+            error!(
+                "Failed to destroy a buffer when resizing a vulkan buffer: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
 
         Ok(new_buffer)
     }
@@ -341,10 +408,24 @@ impl VulkanRendererBackend<'_> {
             .size(size)
             .buffer_usage_flags(BufferUsageFlags::TRANSFER_SRC)
             .should_be_bind(true);
-        let staging_buffer = self.create_buffer(staging_buffer_create_params)?;
+        let staging_buffer = match self.create_buffer(staging_buffer_create_params) {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                error!("Failed to create a vulkan staging buffer: {:?}", err);
+                return Err(err);
+            }
+        };
 
         // Load the data into the staging buffer
-        self.load_data_into_buffer(&staging_buffer, offset, size, MemoryMapFlags::empty(), data)?;
+        if let Err(err) =
+            self.load_data_into_buffer(&staging_buffer, offset, size, MemoryMapFlags::empty(), data)
+        {
+            error!(
+                "Failed to load data into a vulkan staging buffer: {:?}",
+                err
+            );
+            return Err(err);
+        }
 
         // Perform the copy from staging to the device local buffer
         let copy_parameters = BufferCopyParameters {
@@ -353,10 +434,19 @@ impl VulkanRendererBackend<'_> {
             dst_buffer: buffer,
             dst_offset: offset,
         };
-        self.copy_buffer_to(command_parameters, copy_parameters, size)?;
+        if let Err(err) = self.copy_buffer_to(command_parameters, copy_parameters, size) {
+            error!(
+                "Failed to copy data from a vulkan staging buffer: {:?}",
+                err
+            );
+            return Err(err);
+        }
 
         // Clean up the staging buffer
-        self.destroy_buffer(&staging_buffer)?;
+        if let Err(err) = self.destroy_buffer(&staging_buffer) {
+            error!("Failed to destroy a vulkan staging buffer: {:?}", err);
+            return Err(err);
+        }
 
         Ok(())
     }
