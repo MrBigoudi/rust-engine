@@ -93,16 +93,15 @@ impl RendererFrontend {
                     );
                     static mut Z: f32 = -1.0;
                     unsafe { Z -= 0.005 };
-                    let view = glam::Mat4::from_translation(glam::Vec3 {
-                        x: 0.0,
-                        y: 0.0,
-                        z: unsafe { Z },
-                    });
-                    // debug!("proj: {:?}\nview: {:?}\n\n", projection, view);
+                    let view = glam::Mat4::look_at_lh(
+                        glam::Vec3::new(0.0, 0.0, unsafe { Z }),
+                        glam::Vec3::ZERO,
+                        glam::Vec3::new(0.0, 1.0, 0.0),
+                    );
+                    // crate::debug!("\n\tproj: {:?}\n\tview: {:?}\n\n", projection.to_string(), view.to_string());
                     self.backend.as_mut().unwrap().update_global_state(
-                        // projection,
-                        glam::Mat4::IDENTITY,
-                        view.transpose(),
+                        projection,
+                        view,
                         glam::Vec3::ZERO,
                         glam::Vec4::ONE,
                         0,
