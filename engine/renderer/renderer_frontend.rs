@@ -7,15 +7,22 @@ use crate::{core::debug::errors::EngineError, error, platforms::platform::Platfo
 use super::{
     renderer_backend::{renderer_backend_init, RendererBackend},
     renderer_types::{RenderFrameData, RendererBackendType},
+    scene::camera::{Camera, CameraCreatorParameters},
 };
 
 #[derive(Default)]
 pub(crate) struct RendererFrontend {
     pub backend: Option<Box<dyn RendererBackend>>,
+    pub main_camera: Option<Camera>,
 }
 
 impl RendererFrontend {
-    pub fn init(
+    pub fn set_main_camera(&mut self, new_camera: &Camera) {
+        let camera: &mut Camera = self.main_camera.as_mut().unwrap();
+        camera.clone_from(new_camera);
+    }
+
+    pub(crate) fn init(
         &mut self,
         application_name: &str,
         platform: &dyn Platform,
@@ -30,10 +37,15 @@ impl RendererFrontend {
                 }
             };
         self.backend = Some(Box::new(backend));
+        // Default camera
+        self.main_camera = Some(Camera::new(
+            CameraCreatorParameters::default(),
+            self.backend.as_ref().unwrap().get_aspect_ratio()?,
+        ));
         Ok(())
     }
 
-    pub fn shutdown(&mut self) -> Result<(), EngineError> {
+    pub(crate) fn shutdown(&mut self) -> Result<(), EngineError> {
         match self.backend.as_mut().unwrap().shutdown() {
             Ok(()) => (),
             Err(err) => {
@@ -75,7 +87,7 @@ impl RendererFrontend {
         Ok(())
     }
 
-    pub fn draw_frame(&mut self, frame_data: &RenderFrameData) -> Result<(), EngineError> {
+    pub(crate) fn draw_frame(&mut self, frame_data: &RenderFrameData) -> Result<(), EngineError> {
         // If the begin frame returned successfully, mid-frame operations may continue.
         match self.begin_frame(frame_data.delta_time) {
             Err(err) => {
@@ -85,23 +97,10 @@ impl RendererFrontend {
             Ok(true) => {
                 // TODO: temporary test code
                 {
-                    let projection = glam::Mat4::perspective_lh(
-                        (45f32).to_radians(),
-                        self.backend.as_ref().unwrap().get_aspect_ratio()?,
-                        0.1,
-                        1000.0,
-                    );
-                    static mut Z: f32 = -1.0;
-                    unsafe { Z -= 0.005 };
-                    let view = glam::Mat4::look_at_lh(
-                        glam::Vec3::new(0.0, 0.0, unsafe { Z }),
-                        glam::Vec3::ZERO,
-                        glam::Vec3::new(0.0, 1.0, 0.0),
-                    );
-                    // crate::debug!("\n\tproj: {:?}\n\tview: {:?}\n\n", projection.to_string(), view.to_string());
+                    let camera = self.main_camera.unwrap();
                     self.backend.as_mut().unwrap().update_global_state(
-                        projection,
-                        view,
+                        camera.projection,
+                        camera.view,
                         glam::Vec3::ZERO,
                         glam::Vec4::ONE,
                         0,
@@ -135,11 +134,17 @@ impl RendererFrontend {
         }
     }
 
-    pub fn resize(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
+    pub(crate) fn resize(&mut self, width: u32, height: u32) -> Result<(), EngineError> {
         if let Err(err) = self.backend.as_mut().unwrap().resize(width, height) {
             error!("Failed to resize the renderer frontend: {:?}", err);
             return Err(EngineError::Unknown);
         }
+        let new_aspect_ratio = self.backend.as_ref().unwrap().get_aspect_ratio()?;
+        let camera: &mut Camera = match self.main_camera.as_mut() {
+            None => return Ok(()),
+            Some(camera) => camera,
+        };
+        camera.update_aspect_ratio(new_aspect_ratio);
         Ok(())
     }
 }
@@ -203,4 +208,16 @@ pub(crate) fn renderer_shutdown() -> Result<(), EngineError> {
         GLOBAL_RENDERER = Lazy::new(Mutex::default);
     }
     Ok(())
+}
+
+// TODO: put it back to crate visibility
+pub fn renderer_set_main_camera(new_camera: &Camera) -> Result<(), EngineError> {
+    let front_end = fetch_global_renderer(EngineError::UpdateFailed)?;
+    front_end.set_main_camera(new_camera);
+    Ok(())
+}
+
+pub fn renderer_get_main_camera() -> Result<Camera, EngineError> {
+    let front_end = fetch_global_renderer(EngineError::UpdateFailed)?;
+    Ok(front_end.main_camera.unwrap())
 }

@@ -85,12 +85,6 @@ fn engine_shutdown() -> Result<(), EngineError> {
     };
     debug!("Application shutted down");
 
-    if let Err(err) = fetch_global_application()?.game.shutdown() {
-        error!("Failed to shutdown the game: {:?}", err);
-        return Err(EngineError::ShutdownFailed);
-    };
-    debug!("Game shutted down");
-
     match subsystems_shutdown() {
         Ok(()) => (),
         Err(err) => {
@@ -115,8 +109,28 @@ pub fn engine_start(
     };
     debug!("Engine initialized");
 
+    // game on start
+    let application = fetch_global_application()?;
+    if let Err(err) = application.game.on_start() {
+        error!(
+            "Failed to call the `on_start' method of the game: {:?}",
+            err
+        );
+        return Err(EngineError::InitializationFailed);
+    }
+
     // Game loop
     game_loop()?;
+
+    // game on shutdown
+    let application = fetch_global_application()?;
+    if let Err(err) = application.game.on_shutdown() {
+        error!(
+            "Failed to call the `on_shutdown' method of the game: {:?}",
+            err
+        );
+        return Err(EngineError::InitializationFailed);
+    }
 
     // Cleanup
     if let Err(err) = engine_shutdown() {

@@ -238,7 +238,7 @@ impl Application {
             let frame_start_time: f64 = self.platform.as_ref().get_absolute_time_in_seconds()?;
 
             // update the game
-            match self.game.update(delta) {
+            match self.game.on_update(delta) {
                 Ok(()) => (),
                 Err(err) => {
                     error!("Failed to update the game: {:?}", err);
@@ -247,7 +247,7 @@ impl Application {
             }
 
             // render the game
-            match self.game.render(delta) {
+            match self.game.on_render(delta) {
                 Ok(()) => (),
                 Err(err) => {
                     error!("Failed to render the game: {:?}", err);

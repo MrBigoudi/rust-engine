@@ -6,7 +6,7 @@ pub mod src;
 fn main() {
     let application_parameters =
         ApplicationParameters::default().application_name(String::from("EngineTestBed"));
-    let game = Box::new(TestBedGame);
+    let game = Box::new(TestBedGame::default());
 
     match engine_start(application_parameters, game) {
         Ok(()) => (),

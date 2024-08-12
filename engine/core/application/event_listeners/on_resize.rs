@@ -53,7 +53,14 @@ impl EventListener for ApplicationOnResizedListener {
                 app.state = ApplicationState::Running;
             }
 
-            app.game.resize(width, height)?;
+            // game on resize
+            if let Err(err) = app.game.on_resize(width, height) {
+                error!(
+                    "Failed to call the `on_resize' function of the game: {:?}",
+                    err
+                );
+                return Err(EngineError::UpdateFailed);
+            }
             let renderer = fetch_global_renderer(EngineError::UpdateFailed)?;
             renderer.resize(width, height)?;
         }

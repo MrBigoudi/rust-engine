@@ -1,6 +1,15 @@
 use ash::{
     vk::{
-        self, BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags, DescriptorSetLayout, DynamicState, FrontFace, GraphicsPipelineCreateInfo, LogicOp, PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState, PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo, PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout, PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo, PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo, PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode, PrimitiveTopology, PushConstantRange, Rect2D, SampleCountFlags, ShaderStageFlags, VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport
+        self, BlendFactor, BlendOp, ColorComponentFlags, CompareOp, CullModeFlags,
+        DescriptorSetLayout, DynamicState, FrontFace, GraphicsPipelineCreateInfo, LogicOp,
+        PipelineBindPoint, PipelineCache, PipelineColorBlendAttachmentState,
+        PipelineColorBlendStateCreateInfo, PipelineDepthStencilStateCreateInfo,
+        PipelineDynamicStateCreateInfo, PipelineInputAssemblyStateCreateInfo, PipelineLayout,
+        PipelineLayoutCreateInfo, PipelineMultisampleStateCreateInfo,
+        PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo,
+        PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
+        PrimitiveTopology, PushConstantRange, Rect2D, SampleCountFlags, ShaderStageFlags,
+        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
     },
     Device,
 };
@@ -139,8 +148,7 @@ impl Pipeline {
             .render_pass(pipeline_info.renderpass.handler)
             .subpass(0)
             .base_pipeline_handle(vk::Pipeline::null())
-            .base_pipeline_index(-1)
-        ];
+            .base_pipeline_index(-1)];
 
         let pipeline = unsafe {
             match device.create_graphics_pipelines(

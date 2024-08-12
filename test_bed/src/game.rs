@@ -1,31 +1,35 @@
-use engine::game::Game;
+use engine::{
+    game::Game,
+    renderer::{
+        renderer_frontend::{renderer_get_main_camera, renderer_set_main_camera},
+        scene::camera::Camera,
+    },
+};
 
-pub struct TestBedGame;
+#[derive(Default)]
+pub struct TestBedGame {
+    pub camera: Option<Camera>,
+}
 
 impl Game for TestBedGame {
-    fn initialize(&mut self) -> Result<(), engine::core::debug::errors::EngineError> {
+    fn on_start(&mut self) -> Result<(), engine::core::debug::errors::EngineError> {
+        self.camera = Some(renderer_get_main_camera()?);
         Ok(())
     }
 
-    fn update(&mut self, _delta_time: f64) -> Result<(), engine::core::debug::errors::EngineError> {
-        Ok(())
-    }
-
-    fn render(&self, _delta_time: f64) -> Result<(), engine::core::debug::errors::EngineError> {
-        Ok(())
-    }
-
-    fn resize(
+    fn on_update(
         &mut self,
-        _new_width: u32,
-        _new_height: u32,
+        _delta_time: f64,
     ) -> Result<(), engine::core::debug::errors::EngineError> {
-        // TODO: implement window resizing
-        // todo!()
-        Ok(())
-    }
+        static mut Z: f32 = -1.0;
+        unsafe { Z -= 0.005 };
+        let new_eye = glam::Vec3::new(0.0, 0.0, unsafe { Z });
+        let new_center = glam::Vec3::ZERO;
+        let new_up = glam::Vec3::new(0.0, 1.0, 0.0);
+        let camera: &mut Camera = self.camera.as_mut().unwrap();
+        camera.set_view(new_eye, new_center, new_up);
+        renderer_set_main_camera(camera)?;
 
-    fn shutdown(&mut self) -> Result<(), engine::core::debug::errors::EngineError> {
         Ok(())
     }
 }
