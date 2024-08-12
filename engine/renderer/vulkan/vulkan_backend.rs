@@ -5,7 +5,7 @@ use crate::{
     renderer::renderer_backend::RendererBackend,
 };
 
-use super::vulkan_types::VulkanRendererBackend;
+use super::{vulkan_types::VulkanRendererBackend, vulkan_utils::texture::Texture};
 
 impl RendererBackend for VulkanRendererBackend<'_> {
     fn init(&mut self, application_name: &str, platform: &dyn Platform) -> Result<(), EngineError> {
@@ -290,6 +290,41 @@ impl RendererBackend for VulkanRendererBackend<'_> {
             }
         }
         // TODO: end temporary test code
+        Ok(())
+    }
+
+    fn create_texture(
+        &self,
+        params: crate::resources::texture::TextureCreatorParameters,
+    ) -> Result<Box<dyn crate::resources::texture::Texture>, EngineError> {
+        let vulkan_texture = match self.vulkan_create_texture(params) {
+            Ok(texture) => texture,
+            Err(err) => {
+                error!(
+                    "Failed to create a vulkan texture when creating a renderer texture: {:?}",
+                    err
+                );
+                return Err(EngineError::InitializationFailed);
+            }
+        };
+        Ok(Box::new(vulkan_texture))
+    }
+
+    fn destroy_texture(
+        &self,
+        texture: Box<dyn crate::resources::texture::Texture>,
+    ) -> Result<(), EngineError> {
+        let vulkan_texture = match texture.as_any().downcast_ref::<Texture>() {
+            Some(texture) => texture,
+            None => {
+                error!("A vulkan renderer can only destroy vulkan textures");
+                return Err(EngineError::InvalidValue);
+            }
+        };
+        if let Err(err) = self.vulkan_destroy_texture(vulkan_texture) {
+            error!("Failed to destroy a vulkan texture: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        }
         Ok(())
     }
 }

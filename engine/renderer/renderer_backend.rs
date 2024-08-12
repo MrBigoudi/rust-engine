@@ -1,4 +1,9 @@
-use crate::{core::debug::errors::EngineError, error, platforms::platform::Platform};
+use crate::{
+    core::debug::errors::EngineError,
+    error,
+    platforms::platform::Platform,
+    resources::texture::{Texture, TextureCreatorParameters},
+};
 
 use super::{renderer_types::RendererBackendType, vulkan::vulkan_types::VulkanRendererBackend};
 
@@ -30,6 +35,12 @@ pub(crate) trait RendererBackend {
     fn update_object(&mut self, model: glam::Mat4) -> Result<(), EngineError>;
 
     fn get_aspect_ratio(&self) -> Result<f32, EngineError>;
+
+    fn create_texture(
+        &self,
+        params: TextureCreatorParameters,
+    ) -> Result<Box<dyn Texture>, EngineError>;
+    fn destroy_texture(&self, texture: Box<dyn Texture>) -> Result<(), EngineError>;
 }
 
 pub(crate) fn renderer_backend_init(

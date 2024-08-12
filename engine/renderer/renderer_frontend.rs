@@ -2,7 +2,13 @@ use std::sync::Mutex;
 
 use once_cell::sync::Lazy;
 
-use crate::{core::debug::errors::EngineError, error, platforms::platform::Platform, warn};
+use crate::{
+    core::debug::errors::EngineError,
+    error,
+    platforms::platform::Platform,
+    resources::texture::{Texture, TextureCreatorParameters},
+    warn,
+};
 
 use super::{
     renderer_backend::{renderer_backend_init, RendererBackend},
@@ -146,6 +152,13 @@ impl RendererFrontend {
         };
         camera.update_aspect_ratio(new_aspect_ratio);
         Ok(())
+    }
+
+    pub fn create_texture(
+        &self,
+        params: TextureCreatorParameters,
+    ) -> Result<Box<dyn Texture>, EngineError> {
+        self.backend.as_ref().unwrap().create_texture(params)
     }
 }
 

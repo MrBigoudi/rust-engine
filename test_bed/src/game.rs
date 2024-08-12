@@ -1,8 +1,9 @@
 use engine::{
-    game::Game, renderer::{
+    game::Game,
+    renderer::{
         renderer_frontend::{renderer_get_main_camera, renderer_set_main_camera},
         scene::camera::Camera,
-    }
+    },
 };
 
 #[derive(Default)]

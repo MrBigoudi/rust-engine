@@ -5,3 +5,4 @@ pub mod entry;
 pub mod game;
 pub mod platforms;
 pub mod renderer;
+pub mod resources;

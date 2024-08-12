@@ -1,12 +1,20 @@
 use ash::vk::{
-    self, DeviceMemory, Extent3D, Format, ImageAspectFlags, ImageCreateInfo, ImageLayout,
+    self, AccessFlags, BufferImageCopy, DependencyFlags, DeviceMemory, Extent3D, Format,
+    ImageAspectFlags, ImageCreateInfo, ImageLayout, ImageMemoryBarrier, ImageSubresourceLayers,
     ImageSubresourceRange, ImageTiling, ImageType, ImageUsageFlags, ImageView, ImageViewCreateInfo,
-    ImageViewType, MemoryAllocateInfo, MemoryPropertyFlags, SampleCountFlags, SharingMode,
+    ImageViewType, MemoryAllocateInfo, MemoryPropertyFlags, PipelineStageFlags, SampleCountFlags,
+    SharingMode,
 };
 
 use crate::{
-    core::debug::errors::EngineError, error, renderer::vulkan::vulkan_types::VulkanRendererBackend,
+    core::debug::errors::EngineError,
+    error,
+    renderer::vulkan::{
+        vulkan_init::command_buffer::CommandBuffer, vulkan_types::VulkanRendererBackend,
+    },
 };
+
+use super::buffer::Buffer;
 
 #[derive(Default)]
 pub(crate) struct Image {
@@ -228,5 +236,113 @@ impl VulkanRendererBackend<'_> {
                 }
             }
         }
+    }
+
+    pub(crate) fn copy_image_from_buffer(
+        &self,
+        command_buffer: &CommandBuffer,
+        buffer: &Buffer,
+        image: &Image,
+    ) -> Result<(), EngineError> {
+        // Region to copy
+        let subresource = ImageSubresourceLayers::default()
+            .aspect_mask(ImageAspectFlags::COLOR)
+            .mip_level(0)
+            .base_array_layer(0)
+            .layer_count(1);
+        let extent = Extent3D::default()
+            .width(image.width)
+            .height(image.height)
+            .depth(1);
+        let regions = [BufferImageCopy::default()
+            .buffer_offset(0)
+            .buffer_row_length(0)
+            .buffer_image_height(0)
+            .image_subresource(subresource)
+            .image_extent(extent)];
+
+        let device = self.get_device()?;
+        unsafe {
+            device.cmd_copy_buffer_to_image(
+                *command_buffer.handler.as_ref(),
+                buffer.buffer,
+                image.image,
+                ImageLayout::TRANSFER_DST_OPTIMAL,
+                &regions,
+            );
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn transition_image_layout(
+        &self,
+        command_buffer: &CommandBuffer,
+        image: &Image,
+        format: Format,
+        old_layout: ImageLayout,
+        new_layout: ImageLayout,
+    ) -> Result<(), EngineError> {
+        let subresource = ImageSubresourceRange::default()
+            .aspect_mask(ImageAspectFlags::COLOR)
+            .base_mip_level(0)
+            .level_count(1)
+            .base_array_layer(0)
+            .layer_count(1);
+        let graphics_family_index = self.get_queues()?.graphics_family_index.unwrap() as u32;
+        let mut barrier = ImageMemoryBarrier::default()
+            .old_layout(old_layout)
+            .new_layout(new_layout)
+            .src_queue_family_index(graphics_family_index)
+            .dst_queue_family_index(graphics_family_index)
+            .image(image.image)
+            .subresource_range(subresource);
+
+        // VkPipelineStageFlags source_stage;
+        // VkPipelineStageFlags dest_stage;
+
+        // Don't care about the old layout - transition to optimal layout (for the underlying implementation)
+        let (src_stage, dst_stage) = if old_layout == ImageLayout::UNDEFINED
+            && new_layout == ImageLayout::TRANSFER_DST_OPTIMAL
+        {
+            barrier.src_access_mask = AccessFlags::empty();
+            barrier.dst_access_mask = AccessFlags::TRANSFER_WRITE;
+            // Don't care what stage the pipeline is in at the start
+            (
+                PipelineStageFlags::TOP_OF_PIPE,
+                PipelineStageFlags::TRANSFER,
+            )
+        } else if old_layout == ImageLayout::TRANSFER_DST_OPTIMAL
+            && new_layout == ImageLayout::SHADER_READ_ONLY_OPTIMAL
+        {
+            barrier.src_access_mask = AccessFlags::TRANSFER_WRITE;
+            barrier.dst_access_mask = AccessFlags::SHADER_READ;
+            // Don't care what stage the pipeline is in at the start
+            (
+                PipelineStageFlags::TRANSFER,
+                PipelineStageFlags::FRAGMENT_SHADER,
+            )
+        } else {
+            error!("Unsupported vulkan layout transition");
+            return Err(EngineError::VulkanFailed);
+        };
+
+        let device = self.get_device()?;
+        let memory_barriers = [];
+        let buffer_memory_barriers = [];
+        let image_memory_barriers = [];
+        unsafe {
+            device.cmd_pipeline_barrier(
+                *command_buffer.handler.as_ref(),
+                src_stage,
+                dst_stage,
+                DependencyFlags::empty(),
+                &memory_barriers,
+                &buffer_memory_barriers,
+                &image_memory_barriers,
+            );
+        }
+
+        Ok(())
     }
 }
