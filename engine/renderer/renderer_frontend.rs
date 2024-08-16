@@ -6,6 +6,7 @@ use crate::{
     core::debug::errors::EngineError,
     error,
     platforms::platform::Platform,
+    renderer::renderer_types::GeometryRenderData,
     resources::texture::{Texture, TextureCreatorParameters},
     warn,
 };
@@ -25,7 +26,7 @@ pub(crate) struct RendererFrontend {
 impl RendererFrontend {
     pub fn set_main_camera(&mut self, new_camera: &Camera) {
         let camera: &mut Camera = self.main_camera.as_mut().unwrap();
-        camera.clone_from(new_camera);
+        camera.set_view(new_camera.view);
     }
 
     pub(crate) fn init(
@@ -104,23 +105,37 @@ impl RendererFrontend {
                 // TODO: temporary test code
                 {
                     let camera = self.main_camera.unwrap();
-                    self.backend.as_mut().unwrap().update_global_state(
+                    if let Err(err) = self.backend.as_mut().unwrap().update_global_state(
                         camera.projection,
                         camera.view,
                         glam::Vec3::ZERO,
                         glam::Vec4::ONE,
                         0,
-                    )?;
+                    ){
+                        error!("Failed to update the renderer backend global state: {:?}", err);
+                        return Err(EngineError::Unknown);
+                    }
 
                     // mat4 model = mat4_translation((vec3){0, 0, 0});
-                    static mut ANGLE: f32 = 0.01;
-                    unsafe { ANGLE += 0.001 };
-                    let rotation =
-                        glam::Quat::from_axis_angle(glam::Vec3::new(0.0, 0.0, -1.0), unsafe {
-                            ANGLE
-                        });
-                    let model = glam::Mat4::from_quat(rotation);
-                    self.backend.as_mut().unwrap().update_object(model)?;
+                    // static mut ANGLE: f32 = 0.01;
+                    // unsafe { ANGLE += 0.001 };
+                    // let rotation =
+                    //     glam::Quat::from_axis_angle(glam::Vec3::new(0.0, 0.0, -1.0), unsafe {
+                    //         ANGLE
+                    //     });
+                    // let model = glam::Mat4::from_quat(rotation);
+                    let geometry_data = GeometryRenderData::default()
+                        .model(glam::Mat4::IDENTITY)
+                        .object_id(Some(0)) // TODO: actual object id
+                    ;
+                    if let Err(err) = self.backend
+                        .as_mut()
+                        .unwrap()
+                        .update_object(&geometry_data)
+                    {
+                        error!("Failed to update the renderer backend objects: {:?}", err);
+                        return Err(EngineError::Unknown);
+                    }
                 }
                 // TODO: temporary test code
 

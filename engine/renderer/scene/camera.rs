@@ -1,10 +1,10 @@
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub enum ProjectionType {
     Orthographic,
     Perspective,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct Camera {
     pub view: glam::Mat4,
     pub projection_type: ProjectionType,
@@ -122,12 +122,7 @@ impl Camera {
         self.aspect_ratio = aspect_ratio;
     }
 
-    pub fn set_view(&mut self, eye: glam::Vec3, center: glam::Vec3, up: glam::Vec3) {
-        let view = glam::Mat4::look_at_lh(eye, center, up);
+    pub fn set_view(&mut self, view: glam::Mat4) {
         self.view = view;
-    }
-
-    pub fn update_view(&mut self) {
-        self.view = glam::Mat4::look_at_lh(self.eye, self.center, self.up);
     }
 }

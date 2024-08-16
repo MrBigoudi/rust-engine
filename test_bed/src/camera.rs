@@ -1,8 +1,5 @@
-use std::f32::consts::PI;
-
 use engine::{
-    core::debug::errors::EngineError,
-    renderer::{renderer_frontend::renderer_get_main_camera, scene::camera::Camera},
+    core::debug::errors::EngineError, renderer::{renderer_frontend::renderer_get_main_camera, scene::camera::Camera}
 };
 
 pub enum MovementDirection {
@@ -17,12 +14,10 @@ pub enum MovementDirection {
 pub struct CameraMovement {
     pub camera: Camera,
     // movement attributes
-    pub right: glam::Vec3,
-    pub world_up: glam::Vec3,
     pub acceleration: f32,
     pub speed: f32,
-    pub yaw_rad: f32,
-    pub pitch_rad: f32,
+    pub yaw_deg: f32,
+    pub pitch_deg: f32,
     pub is_accelerating: bool,
 }
 
@@ -30,12 +25,10 @@ impl Default for CameraMovement {
     fn default() -> Self {
         Self {
             camera: Camera::default(),
-            right: glam::Vec3::new(1.0, 0.0, 0.0),
-            world_up: glam::Vec3::new(0.0, 1.0, 0.0),
             acceleration: 5.0,
             speed: 20.0,
-            yaw_rad: 3.0 * PI / 4.0,
-            pitch_rad: 0.0,
+            yaw_deg: 0.0,
+            pitch_deg: 0.0,
             is_accelerating: false,
         }
     }
@@ -43,26 +36,33 @@ impl Default for CameraMovement {
 
 impl CameraMovement {
     pub fn new() -> Result<Self, EngineError> {
-        let mut camera = Self {
+        Ok(Self {
             camera: renderer_get_main_camera()?,
             ..Default::default()
-        };
-        camera.update();
-        Ok(camera)
+        })
     }
 
-    fn update(&mut self) {
+    fn update_view(&mut self) {
+        // to create a correct model view, we need to move the world in opposite direction to the camera
+        // so we will create the camera model matrix and invert
+        let translation = glam::Mat4::from_translation(self.camera.eye);
+        let rotation = self.get_rotation_matrix();
+        self.camera.view = translation.mul_mat4(&rotation).inverse();
+    }
+
+    fn get_rotation_matrix(&self) -> glam::Mat4 {
+        // fairly typical FPS style camera. we join the pitch and yaw rotations into the final rotation matrix
+        let pitch_rotation = glam::Quat::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), self.pitch_deg.to_radians());
+        let yaw_rotation = glam::Quat::from_axis_angle(glam::Vec3::new(0.0, -1.0, 0.0), self.yaw_deg.to_radians());
+        glam::Mat4::from_quat(yaw_rotation).mul_mat4(&glam::Mat4::from_quat(pitch_rotation))
+    }
+
+    fn update(&mut self, velocity: glam::Vec3) {
         // calculate the new center vector
-        let front = glam::Vec3::new(
-            self.yaw_rad.cos() * self.pitch_rad.cos(),
-            self.pitch_rad.sin(),
-            self.yaw_rad.sin() * self.pitch_rad.cos(),
-        );
-        self.camera.center = front.normalize();
-        // also re-calculate the Right and Up vector
-        self.right = self.camera.center.cross(self.world_up).normalize();
-        self.camera.up = self.right.cross(self.camera.center);
-        self.camera.update_view();
+        let camera_rotation = self.get_rotation_matrix();
+        let new_position = camera_rotation.mul_vec4(glam::Vec4::new(velocity.x, velocity.y, velocity.z, 1.0));
+        self.camera.eye += glam::Vec3::new(new_position.x, new_position.y, new_position.z);
+        self.update_view();
     }
 
     pub fn handle_movement(&mut self, direction: MovementDirection, delta_time: f64) {
@@ -70,14 +70,16 @@ impl CameraMovement {
         if self.is_accelerating {
             velocity *= self.acceleration;
         }
-        match direction {
-            MovementDirection::Forward => self.camera.eye -= self.camera.center * velocity,
-            MovementDirection::Backward => self.camera.eye += self.camera.center * velocity,
-            MovementDirection::Up => self.camera.eye += self.world_up * velocity,
-            MovementDirection::Down => self.camera.eye -= self.world_up * velocity,
-            MovementDirection::Left => self.camera.eye -= self.right * velocity,
-            MovementDirection::Right => self.camera.eye += self.right * velocity,
-        }
-        self.update();
+        let velocity = velocity * (
+            match direction {
+                MovementDirection::Forward => glam::Vec3::new(0.0, 0.0, 1.0),
+                MovementDirection::Backward => glam::Vec3::new(0.0, 0.0, -1.0),
+                MovementDirection::Up => glam::Vec3::new(0.0, 1.0, 0.0),
+                MovementDirection::Down => glam::Vec3::new(0.0, -1.0, 0.0),
+                MovementDirection::Right => glam::Vec3::new(1.0, 0.0, 0.0),
+                MovementDirection::Left => glam::Vec3::new(-1.0, 0.0, 0.0),
+            }
+        );
+        self.update(velocity);
     }
 }
