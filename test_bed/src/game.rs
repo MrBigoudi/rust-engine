@@ -2,7 +2,10 @@ use engine::{
     core::{
         debug::errors::EngineError,
         systems::input::{input_is_key_down, input_is_key_up, keyboard::Key},
-    }, error, game::Game, renderer::renderer_frontend::renderer_set_main_camera,
+    },
+    error,
+    game::Game,
+    renderer::renderer_frontend::renderer_set_main_camera,
 };
 
 use super::camera::{CameraMovement, MovementDirection};

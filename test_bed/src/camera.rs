@@ -1,5 +1,6 @@
 use engine::{
-    core::debug::errors::EngineError, renderer::{renderer_frontend::renderer_get_main_camera, scene::camera::Camera}
+    core::debug::errors::EngineError,
+    renderer::{renderer_frontend::renderer_get_main_camera, scene::camera::Camera},
 };
 
 pub enum MovementDirection {
@@ -52,15 +53,20 @@ impl CameraMovement {
 
     fn get_rotation_matrix(&self) -> glam::Mat4 {
         // fairly typical FPS style camera. we join the pitch and yaw rotations into the final rotation matrix
-        let pitch_rotation = glam::Quat::from_axis_angle(glam::Vec3::new(1.0, 0.0, 0.0), self.pitch_deg.to_radians());
-        let yaw_rotation = glam::Quat::from_axis_angle(glam::Vec3::new(0.0, -1.0, 0.0), self.yaw_deg.to_radians());
+        let pitch_rotation = glam::Quat::from_axis_angle(
+            glam::Vec3::new(1.0, 0.0, 0.0),
+            self.pitch_deg.to_radians(),
+        );
+        let yaw_rotation =
+            glam::Quat::from_axis_angle(glam::Vec3::new(0.0, -1.0, 0.0), self.yaw_deg.to_radians());
         glam::Mat4::from_quat(yaw_rotation).mul_mat4(&glam::Mat4::from_quat(pitch_rotation))
     }
 
     fn update(&mut self, velocity: glam::Vec3) {
         // calculate the new center vector
         let camera_rotation = self.get_rotation_matrix();
-        let new_position = camera_rotation.mul_vec4(glam::Vec4::new(velocity.x, velocity.y, velocity.z, 1.0));
+        let new_position =
+            camera_rotation.mul_vec4(glam::Vec4::new(velocity.x, velocity.y, velocity.z, 1.0));
         self.camera.eye += glam::Vec3::new(new_position.x, new_position.y, new_position.z);
         self.update_view();
     }
@@ -70,16 +76,15 @@ impl CameraMovement {
         if self.is_accelerating {
             velocity *= self.acceleration;
         }
-        let velocity = velocity * (
-            match direction {
+        let velocity = velocity
+            * (match direction {
                 MovementDirection::Forward => glam::Vec3::new(0.0, 0.0, 1.0),
                 MovementDirection::Backward => glam::Vec3::new(0.0, 0.0, -1.0),
                 MovementDirection::Up => glam::Vec3::new(0.0, 1.0, 0.0),
                 MovementDirection::Down => glam::Vec3::new(0.0, -1.0, 0.0),
                 MovementDirection::Right => glam::Vec3::new(1.0, 0.0, 0.0),
                 MovementDirection::Left => glam::Vec3::new(-1.0, 0.0, 0.0),
-            }
-        );
+            });
         self.update(velocity);
     }
 }

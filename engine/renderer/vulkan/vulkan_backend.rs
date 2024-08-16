@@ -1,8 +1,10 @@
 use ash::vk::{Extent2D, Fence, PipelineStageFlags, Rect2D, SubmitInfo, Viewport};
 
 use crate::{
-    core::debug::errors::EngineError, error, platforms::platform::Platform,
-    renderer::renderer_backend::RendererBackend,
+    core::debug::errors::EngineError,
+    error,
+    platforms::platform::Platform,
+    renderer::{renderer_backend::RendererBackend, renderer_types::GeometryRenderData},
 };
 
 use super::{vulkan_types::VulkanRendererBackend, vulkan_utils::texture::Texture};
@@ -24,6 +26,8 @@ impl RendererBackend for VulkanRendererBackend<'_> {
     }
 
     fn begin_frame(&mut self, delta_time: f64) -> Result<bool, EngineError> {
+        self.frame_delta_time = delta_time;
+
         if self.context.has_framebuffer_been_resized {
             if let Err(err) = self.swapchain_recreate() {
                 error!(
@@ -246,9 +250,9 @@ impl RendererBackend for VulkanRendererBackend<'_> {
         Ok(width / height)
     }
 
-    fn update_object(&mut self, model: glam::Mat4) -> Result<(), EngineError> {
+    fn update_object(&mut self, data: &GeometryRenderData) -> Result<(), EngineError> {
         let current_frame_index = self.context.current_frame as usize;
-        if let Err(err) = self.update_object_shaders(model) {
+        if let Err(err) = self.update_object_shaders(data) {
             error!(
                 "Failed to update the vulkan object shaders when updating the vulkan objects: {:?}",
                 err
@@ -312,7 +316,7 @@ impl RendererBackend for VulkanRendererBackend<'_> {
 
     fn destroy_texture(
         &self,
-        texture: Box<dyn crate::resources::texture::Texture>,
+        texture: &dyn crate::resources::texture::Texture,
     ) -> Result<(), EngineError> {
         let vulkan_texture = match texture.as_any().downcast_ref::<Texture>() {
             Some(texture) => texture,

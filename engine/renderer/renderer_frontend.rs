@@ -21,6 +21,8 @@ use super::{
 pub(crate) struct RendererFrontend {
     pub backend: Option<Box<dyn RendererBackend>>,
     pub main_camera: Option<Camera>,
+    // TODO: temporary
+    pub default_texture: Option<Box<dyn Texture>>,
 }
 
 impl RendererFrontend {
@@ -29,7 +31,43 @@ impl RendererFrontend {
         camera.set_view(new_camera.view);
     }
 
-    pub(crate) fn init(
+    fn init_default_texture(&mut self) -> Result<(), EngineError> {
+        // NOTE: Create default texture, a 256x256 blue/white checkerboard pattern
+        // This is done in code to eliminate asset dependencies
+        let tex_dimension = 256u32;
+        let nb_channels = 4u8;
+        let pixel_count = (tex_dimension * tex_dimension) as usize;
+        let mut pixels = vec![255u8; pixel_count * nb_channels as usize];
+        for row in 0..tex_dimension {
+            for col in 0..tex_dimension {
+                let index: usize = (row * tex_dimension + col) as usize * nb_channels as usize;
+                if row % 2 != 0 || col % 2 == 0 {
+                    pixels[index] = 0;
+                    pixels[index + 1] = 0;
+                }
+            }
+        }
+        let texture_params = TextureCreatorParameters {
+            name: "default texture",
+            auto_release: false,
+            width: tex_dimension,
+            height: tex_dimension,
+            nb_channels,
+            pixels: &pixels,
+            has_transparency: false,
+        };
+        let texture = match self.create_texture(texture_params) {
+            Ok(texture) => texture,
+            Err(err) => {
+                error!("Failed to create the default texture: {:?}", err);
+                return Err(EngineError::InitializationFailed);
+            }
+        };
+        self.default_texture = Some(texture);
+        Ok(())
+    }
+
+    fn init_renderer_backend(
         &mut self,
         application_name: &str,
         platform: &dyn Platform,
@@ -44,7 +82,10 @@ impl RendererFrontend {
                 }
             };
         self.backend = Some(Box::new(backend));
-        // Default camera
+        Ok(())
+    }
+
+    fn init_default_camera(&mut self) -> Result<(), EngineError> {
         self.main_camera = Some(Camera::new(
             CameraCreatorParameters::default(),
             self.backend.as_ref().unwrap().get_aspect_ratio()?,
@@ -52,14 +93,54 @@ impl RendererFrontend {
         Ok(())
     }
 
-    pub(crate) fn shutdown(&mut self) -> Result<(), EngineError> {
-        match self.backend.as_mut().unwrap().shutdown() {
-            Ok(()) => (),
-            Err(err) => {
-                error!("Failed to shutdown the renderer backend: {:?}", err);
-                return Err(EngineError::ShutdownFailed);
+    pub(crate) fn init(
+        &mut self,
+        application_name: &str,
+        platform: &dyn Platform,
+    ) -> Result<(), EngineError> {
+        self.init_renderer_backend(application_name, platform)?;
+        // Default camera
+        self.init_default_camera()?;
+        // Default texture
+        self.init_default_texture()?;
+        Ok(())
+    }
+
+    fn destroy_default_texture(&mut self) -> Result<(), EngineError> {
+        match &self.default_texture {
+            Some(texture) => {
+                if let Err(err) = self
+                    .backend
+                    .as_ref()
+                    .unwrap()
+                    .destroy_texture(texture.as_ref())
+                {
+                    error!("Failed to destroy the default texture: {:?}", err);
+                    return Err(EngineError::ShutdownFailed);
+                }
+                Ok(())
             }
+            None => Ok(()),
         }
+    }
+
+    fn destroy_default_camera(&mut self) -> Result<(), EngineError> {
+        // if needed
+        Ok(())
+    }
+
+    fn destroy_renderer_backend(&mut self) -> Result<(), EngineError> {
+        if let Err(err) = self.backend.as_mut().unwrap().shutdown() {
+            error!("Failed to shutdown the renderer backend: {:?}", err);
+            return Err(EngineError::ShutdownFailed);
+        }
+        Ok(())
+    }
+
+    pub(crate) fn shutdown(&mut self) -> Result<(), EngineError> {
+        self.destroy_default_texture()?;
+        self.destroy_default_camera()?;
+        self.destroy_renderer_backend()?;
         Ok(())
     }
 
@@ -111,8 +192,11 @@ impl RendererFrontend {
                         glam::Vec3::ZERO,
                         glam::Vec4::ONE,
                         0,
-                    ){
-                        error!("Failed to update the renderer backend global state: {:?}", err);
+                    ) {
+                        error!(
+                            "Failed to update the renderer backend global state: {:?}",
+                            err
+                        );
                         return Err(EngineError::Unknown);
                     }
 
@@ -124,15 +208,16 @@ impl RendererFrontend {
                     //         ANGLE
                     //     });
                     // let model = glam::Mat4::from_quat(rotation);
+                    let default_texture = self
+                        .default_texture
+                        .as_ref()
+                        .map(|texture| texture.clone_box());
                     let geometry_data = GeometryRenderData::default()
                         .model(glam::Mat4::IDENTITY)
+                        .texture(0, default_texture)
                         .object_id(Some(0)) // TODO: actual object id
                     ;
-                    if let Err(err) = self.backend
-                        .as_mut()
-                        .unwrap()
-                        .update_object(&geometry_data)
-                    {
+                    if let Err(err) = self.backend.as_mut().unwrap().update_object(&geometry_data) {
                         error!("Failed to update the renderer backend objects: {:?}", err);
                         return Err(EngineError::Unknown);
                     }

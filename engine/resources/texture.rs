@@ -10,8 +10,10 @@ pub trait Texture {
 
     fn has_transparency(&self) -> bool;
 
-    fn get_generation(&self) -> u32;
+    fn get_generation(&self) -> Option<u32>;
     fn as_any(&self) -> &dyn Any;
+
+    fn clone_box(&self) -> Box<dyn Texture>;
 }
 
 pub struct TextureCreatorParameters<'a> {

@@ -1,11 +1,12 @@
 use ash::{
     vk::{
-        BufferUsageFlags, DescriptorBufferInfo, DescriptorPool, DescriptorPoolCreateInfo,
-        DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo, DescriptorSetLayout,
-        DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo, DescriptorType, Extent2D,
-        Format, MemoryMapFlags, MemoryPropertyFlags, Offset2D, PipelineBindPoint,
-        PipelineShaderStageCreateInfo, Rect2D, ShaderStageFlags, VertexInputAttributeDescription,
-        Viewport, WriteDescriptorSet,
+        BufferUsageFlags, DescriptorBufferInfo, DescriptorImageInfo, DescriptorPool,
+        DescriptorPoolCreateInfo, DescriptorPoolSize, DescriptorSet, DescriptorSetAllocateInfo,
+        DescriptorSetLayout, DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo,
+        DescriptorType, Extent2D, Format, ImageLayout, MemoryMapFlags, MemoryPropertyFlags,
+        Offset2D, PipelineBindPoint, PipelineShaderStageCreateInfo, Rect2D, ShaderStageFlags,
+        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
+        WriteDescriptorSet,
     },
     Device,
 };
@@ -14,7 +15,10 @@ use crate::{
     core::debug::errors::EngineError,
     error,
     renderer::{
-        renderer_types::RendererGlobalUniformObject,
+        renderer_types::{
+            GeometryRenderData, RendererGlobalUniformObject, RendererPerObjectUniformObject,
+            RENDERER_MAX_IN_FLIGHT_FRAMES,
+        },
         vulkan::{
             vulkan_init::command_buffer::CommandBuffer,
             vulkan_shaders::shader::Shader,
@@ -22,10 +26,28 @@ use crate::{
             vulkan_utils::{
                 buffer::{Buffer, BufferCreatorParameters},
                 pipeline::{Pipeline, PipelineCreateInfo},
+                texture::Texture,
             },
         },
     },
 };
+
+pub const VULKAN_MAX_OBJECT_COUNT: usize = 1024;
+pub const VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT: usize = 2;
+
+#[derive(Default, Clone, Copy)]
+pub(crate) struct DescriptorState {
+    // One per frame
+    pub generations: [Option<u32>; RENDERER_MAX_IN_FLIGHT_FRAMES],
+}
+
+#[derive(Default, Clone, Copy)]
+pub(crate) struct ObjectShadersPerObjectState {
+    // Per frame
+    pub descriptor_sets: [DescriptorSet; RENDERER_MAX_IN_FLIGHT_FRAMES],
+    // Per descriptor
+    pub descriptor_states: [DescriptorState; VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT],
+}
 
 /// Default shader to display objects
 pub(crate) struct ObjectShaders {
@@ -33,12 +55,20 @@ pub(crate) struct ObjectShaders {
     pub fragment_stage: Shader,
     pub pipeline: Pipeline,
 
-    // One descriptor set per frame - max 3 for triple-buffering
-    pub global_descriptor_sets: [DescriptorSet; 3],
+    // One descriptor set per frame
+    pub global_descriptor_sets: [DescriptorSet; RENDERER_MAX_IN_FLIGHT_FRAMES],
     pub global_descriptor_pool: DescriptorPool,
     pub global_descriptor_set_layout: DescriptorSetLayout,
     pub global_ubo: RendererGlobalUniformObject,
     pub global_uniform_buffer: Buffer,
+
+    pub per_object_descriptor_pool: DescriptorPool,
+    pub per_object_descriptor_set_layout: DescriptorSetLayout,
+    pub per_object_uniform_buffer: Buffer,
+    // TODO: manage a free list of some kind here instead
+    pub object_uniform_buffer_index: u32,
+    // TODO: make dynamic
+    pub object_states: [ObjectShadersPerObjectState; VULKAN_MAX_OBJECT_COUNT],
 }
 
 impl ObjectShaders {
@@ -46,7 +76,7 @@ impl ObjectShaders {
         backend: &'a VulkanRendererBackend<'a>,
         vertex_shader: &'a Shader,
         fragment_shader: &'a Shader,
-        global_ubo_layout: DescriptorSetLayout,
+        layouts: Vec<DescriptorSetLayout>,
     ) -> Result<PipelineCreateInfo<'a>, EngineError> {
         // Pipeline creation
         let viewports = vec![Viewport::default()
@@ -67,16 +97,32 @@ impl ObjectShaders {
 
         // Input attributes
         let offset = 0;
+        let vertex_input_binding_description = VertexInputBindingDescription::default()
+            .binding(0)
+            .stride((size_of::<glam::Vec3>() + size_of::<glam::Vec2>()) as u32)
+            .input_rate(VertexInputRate::VERTEX);
         let position_attribute_description = VertexInputAttributeDescription::default()
             //  position
-            .binding(0)// should match binding description
+            .binding(vertex_input_binding_description.binding)// should match binding description
             .location(0)
             .format(Format::R32G32B32_SFLOAT)
             .offset(0) // because first, else offset += size_of::<attribute type>
         ;
-        let vertex_input_attributes_description = vec![position_attribute_description];
+        let texture_attribute_description = VertexInputAttributeDescription::default()
+            //  texture coordinates
+            .binding(vertex_input_binding_description.binding)// should match binding description
+            .location(1)
+            .format(Format::R32G32_SFLOAT)
+            .offset(size_of::<glam::Vec3>() as u32) // offset += size_of::<previous attribute type>
+        ;
+        let vertex_input_attributes_description = vec![
+            position_attribute_description,
+            texture_attribute_description,
+        ];
+        let vertex_input_bindings_description = vec![vertex_input_binding_description];
 
-        // Desciptor set layouts
+        // descriptor set layouts
+        let descriptor_set_layouts = layouts;
 
         // Stages
         let shader_stages_info = vec![
@@ -98,7 +144,8 @@ impl ObjectShaders {
             scissors,
             is_wireframe: false,
             vertex_input_attributes_description,
-            descriptor_set_layouts: vec![global_ubo_layout],
+            vertex_input_bindings_description,
+            descriptor_set_layouts,
             shader_stages_info,
         })
     }
@@ -177,22 +224,80 @@ impl ObjectShaders {
             }
         };
 
+        // Local/Object Descriptors
+        let local_sampler_count = 1;
+        let local_descriptor_types: [DescriptorType;
+            VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT] = [
+            DescriptorType::UNIFORM_BUFFER,         // Binding 0 - uniform buffer
+            DescriptorType::COMBINED_IMAGE_SAMPLER, // Binding 1 - Diffuse sampler layout
+        ];
+        let mut local_descriptor_set_layout_bindings: [DescriptorSetLayoutBinding;
+            VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT] =
+            [DescriptorSetLayoutBinding::default()
+                .descriptor_count(1)
+                .stage_flags(ShaderStageFlags::FRAGMENT);
+                VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT];
+        for (i, val) in local_descriptor_set_layout_bindings.iter_mut().enumerate() {
+            val.binding = i as u32;
+            val.descriptor_type = local_descriptor_types[i];
+        }
+
+        let local_descriptor_set_layout_create_info = DescriptorSetLayoutCreateInfo::default()
+            .bindings(&local_descriptor_set_layout_bindings);
+        let local_descriptor_set_layouts = unsafe {
+            match device
+                .create_descriptor_set_layout(&local_descriptor_set_layout_create_info, allocator)
+            {
+                Ok(layouts) => layouts,
+                Err(err) => {
+                    error!("Failed to create the local descriptor layouts of the vulkan object shaders: {:?}", err);
+                    return Err(EngineError::VulkanFailed);
+                }
+            }
+        };
+
+        // Local/Object descriptor pool: Used for object-specific items like diffuse colour
+        let local_descriptor_pool_sizes: [DescriptorPoolSize;
+            VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT] = [
+            // The first section will be used for uniform buffers
+            DescriptorPoolSize::default()
+                .ty(DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(VULKAN_MAX_OBJECT_COUNT as u32),
+            // The second section will be used for image samplers
+            DescriptorPoolSize::default()
+                .ty(DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(local_sampler_count * VULKAN_MAX_OBJECT_COUNT as u32),
+        ];
+        let local_descriptor_pool_create_info = DescriptorPoolCreateInfo::default()
+            .pool_sizes(&local_descriptor_pool_sizes)
+            .max_sets(VULKAN_MAX_OBJECT_COUNT as u32);
+
+        // Create object descriptor pool
+        let local_descriptor_pool = unsafe {
+            match device.create_descriptor_pool(&local_descriptor_pool_create_info, allocator) {
+                Ok(pool) => pool,
+                Err(err) => {
+                    error!("failed to create the local descriptor pool of the vulkan object shaders: {:?}", err);
+                    return Err(EngineError::VulkanFailed);
+                }
+            }
+        };
+
+        // Descriptor layouts
+        let layouts = vec![global_ubo_layout, local_descriptor_set_layouts];
+
         // Pipelines
-        let pipeline_info = match Self::create_pipeline_info(
-            backend,
-            &vertex_stage,
-            &fragment_stage,
-            global_ubo_layout,
-        ) {
-            Ok(info) => info,
-            Err(err) => {
-                error!(
+        let pipeline_info =
+            match Self::create_pipeline_info(backend, &vertex_stage, &fragment_stage, layouts) {
+                Ok(info) => info,
+                Err(err) => {
+                    error!(
                     "Failed to create the pipeline info when creating vulkan object shaders: {:?}",
                     err
                 );
-                return Err(EngineError::InitializationFailed);
-            }
-        };
+                    return Err(EngineError::InitializationFailed);
+                }
+            };
         let pipeline = match Pipeline::create_graphics(device, allocator, pipeline_info) {
             Ok(pipeline) => pipeline,
             Err(err) => {
@@ -241,6 +346,21 @@ impl ObjectShaders {
             global_descriptor_sets[2],
         ];
 
+        // Create the local uniform buffer
+        let local_uniform_buffer_creator_params = BufferCreatorParameters::default()
+            .buffer_usage_flags(BufferUsageFlags::TRANSFER_DST | BufferUsageFlags::UNIFORM_BUFFER)
+            .memory_flags(MemoryPropertyFlags::HOST_VISIBLE | MemoryPropertyFlags::HOST_COHERENT)
+            .should_be_bind(true)
+            .size(size_of::<RendererPerObjectUniformObject>());
+        let local_uniform_buffer = match backend.create_buffer(local_uniform_buffer_creator_params)
+        {
+            Ok(buffer) => buffer,
+            Err(err) => {
+                error!("Failed to create the local uniform buffer when creating vulkan object shaders: {:?}", err);
+                return Err(EngineError::InitializationFailed);
+            }
+        };
+
         Ok(ObjectShaders {
             vertex_stage,
             fragment_stage,
@@ -250,6 +370,11 @@ impl ObjectShaders {
             global_descriptor_sets,
             global_ubo: RendererGlobalUniformObject::default(),
             global_uniform_buffer,
+            per_object_descriptor_pool: local_descriptor_pool,
+            per_object_descriptor_set_layout: local_descriptor_set_layouts,
+            per_object_uniform_buffer: local_uniform_buffer,
+            object_uniform_buffer_index: 0,
+            object_states: [ObjectShadersPerObjectState::default(); VULKAN_MAX_OBJECT_COUNT],
         })
     }
 
@@ -257,7 +382,7 @@ impl ObjectShaders {
         let device = backend.get_device()?;
         let allocator = backend.get_allocator()?;
 
-        // Destroy uniform buffer
+        // Destroy uniform buffers
         if let Err(err) = backend.destroy_buffer(&self.global_uniform_buffer) {
             error!(
                 "Failed to destroy the global uniform buffer of the vulkan object shaders: {:?}",
@@ -265,6 +390,14 @@ impl ObjectShaders {
             );
             return Err(EngineError::ShutdownFailed);
         }
+        if let Err(err) = backend.destroy_buffer(&self.per_object_uniform_buffer) {
+            error!(
+                "Failed to destroy the per object uniform buffer of the vulkan object shaders: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
+
         if let Err(err) = self.pipeline.destroy(device, allocator) {
             error!(
                 "Failed to destroy the pipeline of the vulkan object shaders: {:?}",
@@ -289,6 +422,8 @@ impl ObjectShaders {
         unsafe {
             device.destroy_descriptor_pool(self.global_descriptor_pool, allocator);
             device.destroy_descriptor_set_layout(self.global_descriptor_set_layout, allocator);
+            device.destroy_descriptor_pool(self.per_object_descriptor_pool, allocator);
+            device.destroy_descriptor_set_layout(self.per_object_descriptor_set_layout, allocator);
         }
         Ok(())
     }
@@ -312,6 +447,8 @@ impl ObjectShaders {
 
 impl VulkanRendererBackend<'_> {
     pub fn update_object_shaders_global_state(&mut self) -> Result<(), EngineError> {
+        let delta_time = self.frame_delta_time;
+
         let current_frame_index = self.context.current_frame as usize;
         let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
         let device = self.get_device()?;
@@ -380,14 +517,14 @@ impl VulkanRendererBackend<'_> {
         Ok(())
     }
 
-    pub fn update_object_shaders(&mut self, model: glam::Mat4) -> Result<(), EngineError> {
+    pub fn update_object_shaders(&mut self, data: &GeometryRenderData) -> Result<(), EngineError> {
         let current_frame_index = self.context.current_frame as usize;
         let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
         let device = self.get_device()?;
         let object_shaders = &self.get_builtin_shaders()?.object_shaders;
 
         // Convert glam::Mat4 into &[u8]
-        let ptr: *const glam::Mat4 = &model;
+        let ptr: *const glam::Mat4 = &data.model;
         // Convert the raw pointer to a raw pointer to u8
         let byte_ptr: *const u8 = ptr as *const u8;
         // Calculate the length of the byte slice (Mat4 is 16 floats, each 4 bytes)
@@ -405,6 +542,328 @@ impl VulkanRendererBackend<'_> {
             );
         }
 
+        // Obtain material data
+        let object_id = match data.object_id {
+            Some(id) => id as usize,
+            None => {
+                error!("The object id is none");
+                return Err(EngineError::InvalidValue);
+            }
+        };
+
+        let state: &ObjectShadersPerObjectState = match object_shaders.object_states.get(object_id)
+        {
+            Some(_) => &object_shaders.object_states[object_id],
+            None => {
+                error!("The state does not exist");
+                return Err(EngineError::InvalidValue);
+            }
+        };
+
+        let object_descriptor_set = state.descriptor_sets[current_frame_index];
+
+        // TODO: if needs update
+        let mut write_descriptors =
+            [WriteDescriptorSet::default(); VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT];
+
+        // Descriptor 0 - Uniform buffer
+        let range = size_of::<RendererPerObjectUniformObject>();
+        let offset = (size_of::<RendererPerObjectUniformObject>() * object_id) as u64; // also the index into the array.
+
+        // TODO: get diffuse colour from a material
+        let diffuse = glam::Vec4::new(1.0, 1.0, 1.0, 1.0);
+
+        // buffer
+        let mut object_uniform_buffer = RendererPerObjectUniformObject::default().diffuse(diffuse);
+        let object_uniform_buffer = &mut object_uniform_buffer
+            as *mut RendererPerObjectUniformObject
+            as *mut std::ffi::c_void;
+
+        // Load the data into the buffer
+        if let Err(err) = self.load_data_into_buffer(
+            &object_shaders.per_object_uniform_buffer,
+            offset,
+            range,
+            MemoryMapFlags::empty(),
+            object_uniform_buffer,
+        ) {
+            error!(
+                "Failed to load data into buffers when updating objects shader: {:?}",
+                err
+            );
+            return Err(EngineError::Unknown);
+        }
+
+        // Only do this if the descriptor has not yet been updated
+        let mut descriptor_index = 0;
+        let mut descriptor_count = 0;
+        let descriptor_buffer_info_tmp = [DescriptorBufferInfo::default()
+            .buffer(object_shaders.per_object_uniform_buffer.buffer)
+            .offset(offset)
+            .range(range as u64)];
+        if state.descriptor_states[descriptor_index].generations[current_frame_index].is_none() {
+            let descriptor = WriteDescriptorSet::default()
+                .dst_set(object_descriptor_set)
+                .dst_binding(descriptor_index as u32)
+                .descriptor_type(DescriptorType::UNIFORM_BUFFER)
+                .descriptor_count(1)
+                .buffer_info(&descriptor_buffer_info_tmp);
+            write_descriptors[descriptor_count] = descriptor;
+            descriptor_count += 1;
+
+            // Update the frame generation. In this case it is only needed once since this is a buffer
+            let object_shaders = &mut self
+                .context
+                .builtin_shaders
+                .as_mut()
+                .unwrap()
+                .object_shaders;
+            let state: &mut ObjectShadersPerObjectState =
+                match object_shaders.object_states.get(object_id) {
+                    Some(_) => &mut object_shaders.object_states[object_id],
+                    None => {
+                        error!("The state does not exist");
+                        return Err(EngineError::InvalidValue);
+                    }
+                };
+            state.descriptor_states[descriptor_index].generations[current_frame_index] = Some(1);
+        }
+        descriptor_index += 1;
+
+        // TODO: samplers
+        let sampler_count = 1; // only one texture for now
+        let mut descriptor_image_info_tmp: [(
+            bool,                     // is_valid
+            usize,                    // descriptor_count
+            [DescriptorImageInfo; 1], // descriptor_image_info
+            u32,                      // descriptor_index,
+        );
+            VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT] = Default::default();
+        for (sampler_index, current_descriptor_image_info) in descriptor_image_info_tmp
+            .iter_mut()
+            .enumerate()
+            .take(sampler_count)
+        {
+            // for sampler_index in 0..sampler_count {
+            let object_shaders = &self.get_builtin_shaders()?.object_shaders;
+            let state: &ObjectShadersPerObjectState =
+                match object_shaders.object_states.get(object_id) {
+                    Some(_) => &object_shaders.object_states[object_id],
+                    None => {
+                        error!("The state does not exist");
+                        return Err(EngineError::InvalidValue);
+                    }
+                };
+            let texture = &data.textures[sampler_index];
+            let generation =
+                state.descriptor_states[descriptor_index].generations[current_frame_index];
+
+            if let Some(texture) = texture {
+                // Check if the descriptor needs updating first
+                if texture.get_generation() != generation {
+                    let vulkan_texture = match texture.as_any().downcast_ref::<Texture>() {
+                        Some(texture) => texture,
+                        None => {
+                            error!("Failed to downcast a texture to a vulkan texture");
+                            return Err(EngineError::InvalidValue);
+                        }
+                    };
+
+                    // assign view and sampler
+                    let descriptor_image_info = DescriptorImageInfo::default()
+                        .image_layout(ImageLayout::SHADER_READ_ONLY_OPTIMAL)
+                        .image_view(vulkan_texture.image.image_view.unwrap())
+                        .sampler(vulkan_texture.sampler);
+
+                    current_descriptor_image_info.0 = true;
+                    current_descriptor_image_info.1 = descriptor_count;
+                    current_descriptor_image_info.2 = [descriptor_image_info];
+                    current_descriptor_image_info.3 = descriptor_index as u32;
+
+                    descriptor_count += 1;
+
+                    // Sync frame generation if not using a default texture
+                    if texture.get_generation().is_some() {
+                        let object_shaders = &mut self
+                            .context
+                            .builtin_shaders
+                            .as_mut()
+                            .unwrap()
+                            .object_shaders;
+                        let state: &mut ObjectShadersPerObjectState =
+                            match object_shaders.object_states.get(object_id) {
+                                Some(_) => &mut object_shaders.object_states[object_id],
+                                None => {
+                                    error!("The state does not exist");
+                                    return Err(EngineError::InvalidValue);
+                                }
+                            };
+                        state.descriptor_states[descriptor_index].generations
+                            [current_frame_index] = texture.get_generation();
+                    }
+                    descriptor_index += 1;
+                }
+            }
+        }
+        for (is_valid, descriptor_count, descriptor_image_info, descriptor_index) in
+            &descriptor_image_info_tmp
+        {
+            if !is_valid {
+                continue;
+            }
+            let descriptor = WriteDescriptorSet::default()
+                .dst_set(object_descriptor_set)
+                .dst_binding(*descriptor_index)
+                .descriptor_type(DescriptorType::COMBINED_IMAGE_SAMPLER)
+                .descriptor_count(1)
+                .image_info(descriptor_image_info);
+            write_descriptors[*descriptor_count] = descriptor;
+        }
+
+        let device = self.get_device()?;
+        if descriptor_count > 0 {
+            unsafe {
+                device.update_descriptor_sets(&write_descriptors, &[]);
+            }
+        }
+
+        // Bind the descriptor set to be updated, or in case the shader changed
+        let sets = [object_descriptor_set];
+        let object_shaders = &self.get_builtin_shaders()?.object_shaders;
+        let command_buffer = &self.get_graphics_command_buffers()?[current_frame_index];
+        unsafe {
+            device.cmd_bind_descriptor_sets(
+                *command_buffer.handler.as_ref(),
+                PipelineBindPoint::GRAPHICS,
+                object_shaders.pipeline.layout,
+                1,
+                &sets,
+                &[],
+            );
+        }
+
         Ok(())
+    }
+
+    /// Returns the object id of the new resource
+    pub fn object_shader_acquire_resources(&mut self) -> Result<u32, EngineError> {
+        // TODO: free list
+        let object_shaders = &self.get_builtin_shaders()?.object_shaders;
+        let object_id = object_shaders.object_uniform_buffer_index;
+        let object_shaders = &mut self
+            .context
+            .builtin_shaders
+            .as_mut()
+            .unwrap()
+            .object_shaders;
+        object_shaders.object_uniform_buffer_index += 1;
+
+        let state: &mut ObjectShadersPerObjectState =
+            match object_shaders.object_states.get(object_id as usize) {
+                Some(_) => &mut object_shaders.object_states[object_id as usize],
+                None => {
+                    error!("The state does not exist");
+                    return Err(EngineError::InvalidValue);
+                }
+            };
+        for i in 0..VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT {
+            for j in 0..RENDERER_MAX_IN_FLIGHT_FRAMES {
+                state.descriptor_states[i].generations[j] = None;
+            }
+        }
+
+        // Allocate descriptor sets
+        let layouts =
+            [object_shaders.per_object_descriptor_set_layout; RENDERER_MAX_IN_FLIGHT_FRAMES];
+        let allocate_info = DescriptorSetAllocateInfo::default()
+            .descriptor_pool(object_shaders.per_object_descriptor_pool)
+            .set_layouts(&layouts);
+        let device = self.get_device()?;
+        let descriptor_sets = unsafe {
+            match device.allocate_descriptor_sets(&allocate_info) {
+                Ok(set) => set,
+                Err(err) => {
+                    error!("Failed to allocate descriptor set: {:?}", err);
+                    return Err(EngineError::VulkanFailed);
+                }
+            }
+        };
+
+        if descriptor_sets.len() != RENDERER_MAX_IN_FLIGHT_FRAMES {
+            error!("The descriptor doesn't have the required number of elements");
+            return Err(EngineError::InvalidValue);
+        }
+        let object_shaders = &mut self
+            .context
+            .builtin_shaders
+            .as_mut()
+            .unwrap()
+            .object_shaders;
+        let state: &mut ObjectShadersPerObjectState =
+            match object_shaders.object_states.get(object_id as usize) {
+                Some(_) => &mut object_shaders.object_states[object_id as usize],
+                None => {
+                    error!("The state does not exist");
+                    return Err(EngineError::InvalidValue);
+                }
+            };
+        state.descriptor_sets[..RENDERER_MAX_IN_FLIGHT_FRAMES]
+            .copy_from_slice(&descriptor_sets[..RENDERER_MAX_IN_FLIGHT_FRAMES]);
+
+        Ok(object_id)
+    }
+
+    pub fn object_shader_release_resources(&mut self, object_id: u32) -> Result<(), EngineError> {
+        let object_shaders = &self
+            .context
+            .builtin_shaders
+            .as_ref()
+            .unwrap()
+            .object_shaders;
+        let state = match object_shaders.object_states.get(object_id as usize) {
+            Some(_) => &object_shaders.object_states[object_id as usize],
+            None => {
+                error!("The state does not exist");
+                return Err(EngineError::InvalidValue);
+            }
+        };
+
+        // Release object descriptor sets
+        let device = self.get_device()?;
+        unsafe {
+            if let Err(err) = device.free_descriptor_sets(
+                object_shaders.per_object_descriptor_pool,
+                &state.descriptor_sets,
+            ) {
+                error!(
+                    "Failed to destroy descriptor sets of the current object: {:?}",
+                    err
+                );
+                return Err(EngineError::ShutdownFailed);
+            }
+        }
+
+        let object_shaders = &mut self
+            .context
+            .builtin_shaders
+            .as_mut()
+            .unwrap()
+            .object_shaders;
+        let state: &mut ObjectShadersPerObjectState =
+            match object_shaders.object_states.get(object_id as usize) {
+                Some(_) => &mut object_shaders.object_states[object_id as usize],
+                None => {
+                    error!("The state does not exist");
+                    return Err(EngineError::InvalidValue);
+                }
+            };
+        for i in 0..VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT {
+            for j in 0..RENDERER_MAX_IN_FLIGHT_FRAMES {
+                state.descriptor_states[i].generations[j] = None;
+            }
+        }
+        Ok(())
+
+        // TODO: add the object_id to the free list
     }
 }

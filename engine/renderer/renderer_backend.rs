@@ -5,7 +5,10 @@ use crate::{
     resources::texture::{Texture, TextureCreatorParameters},
 };
 
-use super::{renderer_types::RendererBackendType, vulkan::vulkan_types::VulkanRendererBackend};
+use super::{
+    renderer_types::{GeometryRenderData, RendererBackendType},
+    vulkan::vulkan_types::VulkanRendererBackend,
+};
 
 pub(crate) trait RendererBackend {
     fn init(&mut self, application_name: &str, platform: &dyn Platform) -> Result<(), EngineError>;
@@ -32,7 +35,7 @@ pub(crate) trait RendererBackend {
         mode: i32,
     ) -> Result<(), EngineError>;
 
-    fn update_object(&mut self, model: glam::Mat4) -> Result<(), EngineError>;
+    fn update_object(&mut self, data: &GeometryRenderData) -> Result<(), EngineError>;
 
     fn get_aspect_ratio(&self) -> Result<f32, EngineError>;
 
@@ -40,7 +43,7 @@ pub(crate) trait RendererBackend {
         &self,
         params: TextureCreatorParameters,
     ) -> Result<Box<dyn Texture>, EngineError>;
-    fn destroy_texture(&self, texture: Box<dyn Texture>) -> Result<(), EngineError>;
+    fn destroy_texture(&self, texture: &dyn Texture) -> Result<(), EngineError>;
 }
 
 pub(crate) fn renderer_backend_init(

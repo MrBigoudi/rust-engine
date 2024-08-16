@@ -1,4 +1,7 @@
-use crate::{core::debug::errors::EngineError, debug, error, platforms::platform::Platform};
+use crate::{
+    core::debug::errors::EngineError, debug, error, platforms::platform::Platform,
+    renderer::renderer_types::VertexData,
+};
 
 use super::{vulkan_types::VulkanRendererBackend, vulkan_utils::buffer::BufferCommandParameters};
 
@@ -175,11 +178,23 @@ impl VulkanRendererBackend<'_> {
         // TODO: temporary test code
         {
             let factor = 10.0;
-            let mut vertices = vec![
-                glam::Vec3::new(-0.5 * factor, -0.5 * factor, 0.0),
-                glam::Vec3::new(0.5 * factor, 0.5 * factor, 0.0),
-                glam::Vec3::new(-0.5 * factor, 0.5 * factor, 0.0),
-                glam::Vec3::new(0.5 * factor, -0.5 * factor, 0.0),
+            let mut vertices: Vec<VertexData> = vec![
+                VertexData {
+                    position: glam::Vec3::new(-0.5 * factor, -0.5 * factor, 0.0),
+                    texture: glam::Vec2::new(0.0, 0.0),
+                },
+                VertexData {
+                    position: glam::Vec3::new(0.5 * factor, 0.5 * factor, 0.0),
+                    texture: glam::Vec2::new(1.0, 1.0),
+                },
+                VertexData {
+                    position: glam::Vec3::new(-0.5 * factor, 0.5 * factor, 0.0),
+                    texture: glam::Vec2::new(0.0, 1.0),
+                },
+                VertexData {
+                    position: glam::Vec3::new(0.5 * factor, -0.5 * factor, 0.0),
+                    texture: glam::Vec2::new(1.0, 0.0),
+                },
             ];
             let mut indices: Vec<u32> = vec![0, 1, 2, 0, 3, 1];
             let vertices_command_parameters = BufferCommandParameters {
@@ -188,7 +203,7 @@ impl VulkanRendererBackend<'_> {
                 queue: self.get_queues()?.graphics_queue.unwrap(),
             };
             let vertices_buffer = &self.get_objects_buffers()?.vertex_buffer;
-            let vertices_size = size_of::<glam::Vec3>() * vertices.len();
+            let vertices_size = size_of::<VertexData>() * vertices.len();
             self.upload_data_range(
                 vertices_command_parameters,
                 vertices_buffer,
@@ -211,6 +226,14 @@ impl VulkanRendererBackend<'_> {
                 indices_size,
                 indices.as_mut_ptr() as *mut std::ffi::c_void,
             )?;
+
+            let object_id = match self.object_shader_acquire_resources() {
+                Ok(id) => id,
+                Err(err) => {
+                    error!("Failed to acquire the shader resources: {:?}", err);
+                    return Err(EngineError::AccessFailed);
+                }
+            };
         }
         // TODO: end temp code
 

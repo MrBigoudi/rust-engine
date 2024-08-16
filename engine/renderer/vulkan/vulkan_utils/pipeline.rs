@@ -9,7 +9,7 @@ use ash::{
         PipelineRasterizationStateCreateInfo, PipelineShaderStageCreateInfo,
         PipelineVertexInputStateCreateInfo, PipelineViewportStateCreateInfo, PolygonMode,
         PrimitiveTopology, PushConstantRange, Rect2D, SampleCountFlags, ShaderStageFlags,
-        VertexInputAttributeDescription, VertexInputBindingDescription, VertexInputRate, Viewport,
+        VertexInputAttributeDescription, VertexInputBindingDescription, Viewport,
     },
     Device,
 };
@@ -31,6 +31,7 @@ pub(crate) struct PipelineCreateInfo<'a> {
     pub viewports: Vec<Viewport>,
     pub scissors: Vec<Rect2D>,
     pub is_wireframe: bool,
+    pub vertex_input_bindings_description: Vec<VertexInputBindingDescription>,
     pub vertex_input_attributes_description: Vec<VertexInputAttributeDescription>,
     pub descriptor_set_layouts: Vec<DescriptorSetLayout>,
     pub shader_stages_info: Vec<PipelineShaderStageCreateInfo<'a>>,
@@ -93,15 +94,8 @@ impl Pipeline {
             PipelineDynamicStateCreateInfo::default().dynamic_states(&dynamic_states);
 
         // Vertex Input
-        let vertex_input_binding_descriptions = [
-            VertexInputBindingDescription::default()
-                // vec3 position at binding = 0
-                .binding(0)
-                .stride(size_of::<glam::Vec3>() as u32)
-                .input_rate(VertexInputRate::VERTEX), // move to next data entry for each vertex
-        ];
         let vertex_input_create_info = PipelineVertexInputStateCreateInfo::default()
-            .vertex_binding_descriptions(&vertex_input_binding_descriptions)
+            .vertex_binding_descriptions(&pipeline_info.vertex_input_bindings_description)
             .vertex_attribute_descriptions(&pipeline_info.vertex_input_attributes_description);
 
         // Input assembly

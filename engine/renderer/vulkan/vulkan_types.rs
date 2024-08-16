@@ -59,4 +59,5 @@ pub(crate) struct VulkanRendererBackend<'a> {
     pub frame_number: u64,
     pub framebuffer_width: u32,
     pub framebuffer_height: u32,
+    pub frame_delta_time: f64,
 }

@@ -16,7 +16,7 @@ use crate::{
 
 use super::buffer::Buffer;
 
-#[derive(Default)]
+#[derive(Default, Clone, Copy)]
 pub(crate) struct Image {
     pub memory: DeviceMemory,
     pub image: vk::Image,
@@ -290,7 +290,7 @@ impl VulkanRendererBackend<'_> {
             .base_array_layer(0)
             .layer_count(1);
         let graphics_family_index = self.get_queues()?.graphics_family_index.unwrap() as u32;
-        let mut barrier = ImageMemoryBarrier::default()
+        let mut image_memory_barrier = ImageMemoryBarrier::default()
             .old_layout(old_layout)
             .new_layout(new_layout)
             .src_queue_family_index(graphics_family_index)
@@ -305,8 +305,8 @@ impl VulkanRendererBackend<'_> {
         let (src_stage, dst_stage) = if old_layout == ImageLayout::UNDEFINED
             && new_layout == ImageLayout::TRANSFER_DST_OPTIMAL
         {
-            barrier.src_access_mask = AccessFlags::empty();
-            barrier.dst_access_mask = AccessFlags::TRANSFER_WRITE;
+            image_memory_barrier.src_access_mask = AccessFlags::empty();
+            image_memory_barrier.dst_access_mask = AccessFlags::TRANSFER_WRITE;
             // Don't care what stage the pipeline is in at the start
             (
                 PipelineStageFlags::TOP_OF_PIPE,
@@ -315,9 +315,8 @@ impl VulkanRendererBackend<'_> {
         } else if old_layout == ImageLayout::TRANSFER_DST_OPTIMAL
             && new_layout == ImageLayout::SHADER_READ_ONLY_OPTIMAL
         {
-            barrier.src_access_mask = AccessFlags::TRANSFER_WRITE;
-            barrier.dst_access_mask = AccessFlags::SHADER_READ;
-            // Don't care what stage the pipeline is in at the start
+            image_memory_barrier.src_access_mask = AccessFlags::TRANSFER_WRITE;
+            image_memory_barrier.dst_access_mask = AccessFlags::SHADER_READ;
             (
                 PipelineStageFlags::TRANSFER,
                 PipelineStageFlags::FRAGMENT_SHADER,
@@ -330,7 +329,7 @@ impl VulkanRendererBackend<'_> {
         let device = self.get_device()?;
         let memory_barriers = [];
         let buffer_memory_barriers = [];
-        let image_memory_barriers = [];
+        let image_memory_barriers = [image_memory_barrier];
         unsafe {
             device.cmd_pipeline_barrier(
                 *command_buffer.handler.as_ref(),

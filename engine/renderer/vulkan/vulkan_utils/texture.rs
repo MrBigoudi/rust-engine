@@ -18,12 +18,13 @@ use super::{
     image::{Image, ImageCreatorParameters},
 };
 
+#[derive(Clone, Copy)]
 pub(crate) struct Texture {
     pub width: u32,
     pub height: u32,
     pub id: u32,
     pub nb_channels: u8,
-    pub generation: u32,
+    pub generation: Option<u32>,
     pub has_transparency: bool,
     pub image: Image,
     pub sampler: Sampler,
@@ -50,17 +51,28 @@ impl crate::resources::texture::Texture for Texture {
         self.has_transparency
     }
 
-    fn get_generation(&self) -> u32 {
+    fn get_generation(&self) -> Option<u32> {
         self.generation
     }
 
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
+
+    fn clone_box(&self) -> Box<dyn crate::resources::texture::Texture> {
+        Box::new(*self)
+    }
 }
 
 impl VulkanRendererBackend<'_> {
     pub(crate) fn vulkan_destroy_texture(&self, texture: &Texture) -> Result<(), EngineError> {
+        if let Err(err) = self.device_wait_idle() {
+            error!(
+                "Failed to wait idle when destroying a vulkan texture: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
         if let Err(err) = self.destroy_image(&texture.image) {
             error!(
                 "Failed to destroy the image when destroying a vulkan texture: {:?}",
@@ -89,7 +101,8 @@ impl VulkanRendererBackend<'_> {
         let buffer_create_info = BufferCreatorParameters::default()
             .buffer_usage_flags(BufferUsageFlags::TRANSFER_SRC)
             .memory_flags(memory_prop_flags)
-            .size(image_size);
+            .size(image_size)
+            .should_be_bind(true);
         let staging = match self.create_buffer(buffer_create_info) {
             Ok(staging) => staging,
             Err(err) => {
@@ -231,12 +244,21 @@ impl VulkanRendererBackend<'_> {
             }
         };
 
+        // Destroy the staging buffer
+        if let Err(err) = self.destroy_buffer(&staging) {
+            error!(
+                "Failed to destroy the staging buffer when creating a vulkan texture: {:?}",
+                err
+            );
+            return Err(EngineError::ShutdownFailed);
+        }
+
         Ok(Texture {
             width: params.width,
             height: params.height,
             id: 0, // TODO: change id
             nb_channels: params.nb_channels,
-            generation: 1, // TODO: change generation
+            generation: Some(0),
             has_transparency: params.has_transparency,
             image,
             sampler,
