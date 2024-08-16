@@ -1,34 +1,78 @@
 use engine::{
-    game::Game,
-    renderer::{
-        renderer_frontend::{renderer_get_main_camera, renderer_set_main_camera},
-        scene::camera::Camera,
+    core::{
+        debug::errors::EngineError,
+        systems::input::{input_is_key_down, input_is_key_up, keyboard::Key},
     },
+    error,
+    game::Game,
+    renderer::renderer_frontend::renderer_set_main_camera,
 };
+
+use super::camera::{CameraMovement, MovementDirection};
 
 #[derive(Default)]
 pub struct TestBedGame {
-    pub camera: Option<Camera>,
+    pub camera: CameraMovement,
 }
 
-impl Game for TestBedGame {
-    fn on_start(&mut self) -> Result<(), engine::core::debug::errors::EngineError> {
-        self.camera = Some(renderer_get_main_camera()?);
+impl TestBedGame {
+    fn handle_input_camera(&mut self, delta_time: f64) -> Result<(), EngineError> {
+        // move camera
+        if input_is_key_down(Key::W).unwrap() {
+            self.camera
+                .handle_movement(MovementDirection::Forward, delta_time);
+        }
+        if input_is_key_down(Key::S).unwrap() {
+            self.camera
+                .handle_movement(MovementDirection::Backward, delta_time);
+        }
+        if input_is_key_down(Key::A).unwrap() {
+            self.camera
+                .handle_movement(MovementDirection::Left, delta_time);
+        }
+        if input_is_key_down(Key::D).unwrap() {
+            self.camera
+                .handle_movement(MovementDirection::Right, delta_time);
+        }
+        if input_is_key_down(Key::UP).unwrap() {
+            self.camera
+                .handle_movement(MovementDirection::Up, delta_time);
+        }
+        if input_is_key_down(Key::DOWN).unwrap() {
+            self.camera
+                .handle_movement(MovementDirection::Down, delta_time);
+        }
+        // handle acceleration
+        if input_is_key_down(Key::LSHIFT).unwrap() {
+            self.camera.is_accelerating = true;
+        }
+        if input_is_key_up(Key::LSHIFT).unwrap() {
+            self.camera.is_accelerating = false;
+        }
         Ok(())
     }
 
-    fn on_update(
-        &mut self,
-        _delta_time: f64,
-    ) -> Result<(), engine::core::debug::errors::EngineError> {
-        static mut Z: f32 = -1.0;
-        unsafe { Z -= 0.005 };
-        let new_eye = glam::Vec3::new(0.0, 0.0, unsafe { Z });
-        let new_center = glam::Vec3::ZERO;
-        let new_up = glam::Vec3::new(0.0, 1.0, 0.0);
-        let camera: &mut Camera = self.camera.as_mut().unwrap();
-        camera.set_view(new_eye, new_center, new_up);
-        renderer_set_main_camera(camera)?;
+    fn handle_input(&mut self, delta_time: f64) -> Result<(), EngineError> {
+        if let Err(err) = self.handle_input_camera(delta_time) {
+            error!("Failed to handle input in the testbed game: {:?}", err);
+            return Err(EngineError::Unknown);
+        }
+        Ok(())
+    }
+}
+
+impl Game for TestBedGame {
+    fn on_start(&mut self) -> Result<(), EngineError> {
+        self.camera = CameraMovement::new()?;
+        Ok(())
+    }
+
+    fn on_update(&mut self, delta_time: f64) -> Result<(), EngineError> {
+        if let Err(err) = self.handle_input(delta_time) {
+            error!("Failed to handle input in the testbed game: {:?}", err);
+            return Err(EngineError::Unknown);
+        }
+        renderer_set_main_camera(&self.camera.camera)?;
 
         Ok(())
     }

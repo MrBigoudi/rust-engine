@@ -113,3 +113,13 @@ fn fetch_global_input_state(error: EngineError) -> Result<&'static mut InputStat
         }
     }
 }
+
+pub fn input_is_key_up(key: Key) -> Result<bool, EngineError> {
+    let global_state = fetch_global_input_state(EngineError::AccessFailed)?;
+    Ok(global_state.get_current_key_state(key) == KeyState::Released)
+}
+
+pub fn input_is_key_down(key: Key) -> Result<bool, EngineError> {
+    let global_state = fetch_global_input_state(EngineError::AccessFailed)?;
+    Ok(global_state.get_current_key_state(key) == KeyState::Pressed)
+}

@@ -79,6 +79,12 @@ impl CameraCreatorParameters {
     }
 }
 
+impl Default for Camera {
+    fn default() -> Self {
+        Camera::new(CameraCreatorParameters::default(), 16.0 / 9.0)
+    }
+}
+
 impl Camera {
     pub fn new(parameters: CameraCreatorParameters, aspect_ratio: f32) -> Self {
         let view = glam::Mat4::look_at_lh(parameters.eye, parameters.center, parameters.up);
@@ -119,5 +125,9 @@ impl Camera {
     pub fn set_view(&mut self, eye: glam::Vec3, center: glam::Vec3, up: glam::Vec3) {
         let view = glam::Mat4::look_at_lh(eye, center, up);
         self.view = view;
+    }
+
+    pub fn update_view(&mut self) {
+        self.view = glam::Mat4::look_at_lh(self.eye, self.center, self.up);
     }
 }
