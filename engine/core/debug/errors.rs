@@ -12,4 +12,5 @@ pub enum EngineError {
     AccessFailed,
     Synchronisation,
     UpdateFailed,
+    IO,
 }

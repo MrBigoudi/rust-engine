@@ -253,12 +253,14 @@ impl VulkanRendererBackend<'_> {
             return Err(EngineError::ShutdownFailed);
         }
 
+        let generation = if params.is_default { None } else { Some(0) };
+
         Ok(Texture {
             width: params.width,
             height: params.height,
             id: 0, // TODO: change id
             nb_channels: params.nb_channels,
-            generation: Some(0),
+            generation,
             has_transparency: params.has_transparency,
             image,
             sampler,

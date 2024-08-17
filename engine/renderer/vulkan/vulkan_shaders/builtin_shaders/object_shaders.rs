@@ -15,6 +15,7 @@ use crate::{
     core::debug::errors::EngineError,
     error,
     renderer::{
+        renderer_frontend::renderer_get_default_texture,
         renderer_types::{
             GeometryRenderData, RendererGlobalUniformObject, RendererPerObjectUniformObject,
             RENDERER_MAX_IN_FLIGHT_FRAMES,
@@ -563,8 +564,7 @@ impl VulkanRendererBackend<'_> {
         let object_descriptor_set = state.descriptor_sets[current_frame_index];
 
         // TODO: if needs update
-        let mut write_descriptors =
-            [WriteDescriptorSet::default(); VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT];
+        let mut write_descriptors: Vec<WriteDescriptorSet> = Vec::new();
 
         // Descriptor 0 - Uniform buffer
         let range = size_of::<RendererPerObjectUniformObject>();
@@ -596,7 +596,8 @@ impl VulkanRendererBackend<'_> {
 
         // Only do this if the descriptor has not yet been updated
         let mut descriptor_index = 0;
-        let mut descriptor_count = 0;
+        let mut should_update_descriptor_sets = false;
+
         let descriptor_buffer_info_tmp = [DescriptorBufferInfo::default()
             .buffer(object_shaders.per_object_uniform_buffer.buffer)
             .offset(offset)
@@ -608,8 +609,8 @@ impl VulkanRendererBackend<'_> {
                 .descriptor_type(DescriptorType::UNIFORM_BUFFER)
                 .descriptor_count(1)
                 .buffer_info(&descriptor_buffer_info_tmp);
-            write_descriptors[descriptor_count] = descriptor;
-            descriptor_count += 1;
+            write_descriptors.push(descriptor);
+            should_update_descriptor_sets = true;
 
             // Update the frame generation. In this case it is only needed once since this is a buffer
             let object_shaders = &mut self
@@ -630,20 +631,14 @@ impl VulkanRendererBackend<'_> {
         }
         descriptor_index += 1;
 
-        // TODO: samplers
+        // TODO: other samplers
         let sampler_count = 1; // only one texture for now
-        let mut descriptor_image_info_tmp: [(
-            bool,                     // is_valid
-            usize,                    // descriptor_count
-            [DescriptorImageInfo; 1], // descriptor_image_info
-            u32,                      // descriptor_index,
-        );
-            VULKAN_OBJECT_SHADERS_PER_OBJECT_DESCRIPTOR_COUNT] = Default::default();
-        for (sampler_index, current_descriptor_image_info) in descriptor_image_info_tmp
-            .iter_mut()
-            .enumerate()
-            .take(sampler_count)
-        {
+        let mut descriptor_image_info_tmp: Vec<(
+                [DescriptorImageInfo; 1], // descriptor_image_info
+                u32,                      // descriptor_index,
+            )> = Vec::new()
+        ;
+        for sampler_index in 0..sampler_count {
             // for sampler_index in 0..sampler_count {
             let object_shaders = &self.get_builtin_shaders()?.object_shaders;
             let state: &ObjectShadersPerObjectState =
@@ -659,8 +654,41 @@ impl VulkanRendererBackend<'_> {
                 state.descriptor_states[descriptor_index].generations[current_frame_index];
 
             if let Some(texture) = texture {
+                // If the texture hasn't been loaded yet, use the default
+                // TODO: Determine which use the texture has and pull appropriate default based on that
+                let (texture, is_default_texture) = if texture.get_generation().is_none() {
+                    // Reset the descriptor generation if using the default texture
+                    let object_shaders = &mut self
+                        .context
+                        .builtin_shaders
+                        .as_mut()
+                        .unwrap()
+                        .object_shaders;
+                    let state: &mut ObjectShadersPerObjectState =
+                        match object_shaders.object_states.get(object_id) {
+                            Some(_) => &mut object_shaders.object_states[object_id],
+                            None => {
+                                error!("The state does not exist");
+                                return Err(EngineError::InvalidValue);
+                            }
+                        };
+                    state.descriptor_states[descriptor_index].generations[current_frame_index] =
+                        None;
+                    (
+                        match renderer_get_default_texture() {
+                            Ok(texture) => texture,
+                            Err(err) => {
+                                error!("Failed to fetch the default texture when updating the object shaders: {:?}", err);
+                                return Err(EngineError::AccessFailed);
+                            }
+                        },
+                        true,
+                    )
+                } else {
+                    (texture.as_ref(), false)
+                };
                 // Check if the descriptor needs updating first
-                if texture.get_generation() != generation {
+                if texture.get_generation() != generation || is_default_texture {
                     let vulkan_texture = match texture.as_any().downcast_ref::<Texture>() {
                         Some(texture) => texture,
                         None => {
@@ -675,13 +703,15 @@ impl VulkanRendererBackend<'_> {
                         .image_view(vulkan_texture.image.image_view.unwrap())
                         .sampler(vulkan_texture.sampler);
 
-                    current_descriptor_image_info.0 = true;
-                    current_descriptor_image_info.1 = descriptor_count;
-                    current_descriptor_image_info.2 = [descriptor_image_info];
-                    current_descriptor_image_info.3 = descriptor_index as u32;
+                    descriptor_image_info_tmp.push(
+                        (
+                            [descriptor_image_info], 
+                            descriptor_index as u32
+                        )
+                    );
 
-                    descriptor_count += 1;
-
+                    should_update_descriptor_sets = true;
+                    
                     // Sync frame generation if not using a default texture
                     if texture.get_generation().is_some() {
                         let object_shaders = &mut self
@@ -705,23 +735,18 @@ impl VulkanRendererBackend<'_> {
                 }
             }
         }
-        for (is_valid, descriptor_count, descriptor_image_info, descriptor_index) in
-            &descriptor_image_info_tmp
-        {
-            if !is_valid {
-                continue;
-            }
+        for (descriptor_image_info, descriptor_index) in &descriptor_image_info_tmp {
             let descriptor = WriteDescriptorSet::default()
                 .dst_set(object_descriptor_set)
                 .dst_binding(*descriptor_index)
                 .descriptor_type(DescriptorType::COMBINED_IMAGE_SAMPLER)
                 .descriptor_count(1)
                 .image_info(descriptor_image_info);
-            write_descriptors[*descriptor_count] = descriptor;
+            write_descriptors.push(descriptor);
         }
 
         let device = self.get_device()?;
-        if descriptor_count > 0 {
+        if should_update_descriptor_sets {
             unsafe {
                 device.update_descriptor_sets(&write_descriptors, &[]);
             }

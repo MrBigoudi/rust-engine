@@ -1,11 +1,11 @@
 use engine::{
     core::{
         debug::errors::EngineError,
-        systems::input::{input_is_key_down, input_is_key_up, keyboard::Key},
+        systems::input::{input_is_key_down, input_is_key_up, input_was_key_down, keyboard::Key},
     },
     error,
     game::Game,
-    renderer::renderer_frontend::renderer_set_main_camera,
+    renderer::renderer_frontend::{renderer_set_main_camera, renderer_swap_default_texture},
 };
 
 use super::camera::{CameraMovement, MovementDirection};
@@ -57,6 +57,16 @@ impl TestBedGame {
             error!("Failed to handle input in the testbed game: {:?}", err);
             return Err(EngineError::Unknown);
         }
+
+        // TODO: temporary code
+        if input_is_key_up(Key::T).unwrap() && input_was_key_down(Key::T).unwrap() {
+            if let Err(err) = renderer_swap_default_texture() {
+                error!("Failed to swap the default texture: {:?}", err);
+                return Err(EngineError::UpdateFailed);
+            }
+        }
+        // TODO: end of temporary code
+
         Ok(())
     }
 }

@@ -24,4 +24,5 @@ pub struct TextureCreatorParameters<'a> {
     pub nb_channels: u8,
     pub pixels: &'a [u8],
     pub has_transparency: bool,
+    pub is_default: bool,
 }

@@ -1,5 +1,9 @@
-use std::sync::Mutex;
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
+use image::ImageReader;
 use once_cell::sync::Lazy;
 
 use crate::{
@@ -21,6 +25,7 @@ use super::{
 pub(crate) struct RendererFrontend {
     pub backend: Option<Box<dyn RendererBackend>>,
     pub main_camera: Option<Camera>,
+
     // TODO: temporary
     pub default_texture: Option<Box<dyn Texture>>,
 }
@@ -55,6 +60,7 @@ impl RendererFrontend {
             nb_channels,
             pixels: &pixels,
             has_transparency: false,
+            is_default: true,
         };
         let texture = match self.create_texture(texture_params) {
             Ok(texture) => texture,
@@ -260,6 +266,122 @@ impl RendererFrontend {
     ) -> Result<Box<dyn Texture>, EngineError> {
         self.backend.as_ref().unwrap().create_texture(params)
     }
+
+    pub fn load_texture(&self, path: &Path, name: &str) -> Result<Box<dyn Texture>, EngineError> {
+        // TODO: Better path handling
+        let image = match ImageReader::open(path) {
+            Ok(image) => image,
+            Err(err) => {
+                error!(
+                    "Failed to open the file: {:?}, when trying to load a texture: {:?}",
+                    path, err
+                );
+                return Err(EngineError::IO);
+            }
+        };
+        let image = match image.decode() {
+            Ok(image) => image,
+            Err(err) => {
+                error!(
+                    "Failed to decode the file: {:?}, when trying to load a texture: {:?}",
+                    path, err
+                );
+                return Err(EngineError::IO);
+            }
+        };
+        // TODO: handle different formats
+        let image = image.to_rgba8();
+        let mut has_transparency = false;
+        for pixel in image.pixels() {
+            if pixel[3] < 255 {
+                has_transparency = true; // Transparency found
+            }
+        }
+
+        let texture_parameters = TextureCreatorParameters {
+            name,
+            auto_release: true,
+            width: image.width(),
+            height: image.height(),
+            nb_channels: 4, // for now
+            pixels: image.as_raw(),
+            has_transparency,
+            is_default: self.default_texture.is_some()
+                && self
+                    .default_texture
+                    .as_ref()
+                    .unwrap()
+                    .get_generation()
+                    .is_some(),
+        };
+
+        // Acquire internal texture resources and upload to GPU
+        let new_texture = match self.create_texture(texture_parameters) {
+            Ok(texture) => texture,
+            Err(err) => {
+                error!(
+                    "Failed to create the backend texture when creating a frontend texture: {:?}",
+                    err
+                );
+                return Err(EngineError::InitializationFailed);
+            }
+        };
+        Ok(new_texture)
+    }
+
+    fn update_default_texture(&mut self, new_texture: Box<dyn Texture>) -> Result<(), EngineError> {
+        // Destroy Old texture
+        if let Some(texture) = &self.default_texture {
+            if let Err(err) = self
+                .backend
+                .as_ref()
+                .unwrap()
+                .destroy_texture(texture.as_ref())
+            {
+                error!("Failed to destroy the old texture when updating the renderer default's texture: {:?}", err);
+                return Err(EngineError::ShutdownFailed);
+            }
+        }
+        self.default_texture = Some(new_texture);
+        Ok(())
+    }
+
+    // TODO: temporary test code
+    pub fn swap_default_texture(&mut self) -> Result<(), EngineError> {
+        // Get the current working directory
+        let crate_dir = env!("CARGO_MANIFEST_DIR");
+        let paths: [PathBuf; 2] = [
+            Path::new(crate_dir).join("assets/textures/cobblestone.png"),
+            Path::new(crate_dir).join("assets/textures/paving.png"),
+        ];
+        let names = ["cobblestone", "paving"];
+
+        static mut CUR_CHOICE: usize = 0;
+        unsafe { CUR_CHOICE = (CUR_CHOICE + 1) % names.len() };
+
+        let new_texture =
+            match self.load_texture(&paths[unsafe { CUR_CHOICE }], names[unsafe { CUR_CHOICE }]) {
+                Ok(texture) => texture,
+                Err(err) => {
+                    error!(
+                        "Failed to load a new texture when swapping the default texture: {:?}",
+                        err
+                    );
+                    return Err(EngineError::InitializationFailed);
+                }
+            };
+
+        if let Err(err) = self.update_default_texture(new_texture) {
+            error!(
+                "Failed to update the default texture when swapping the default texture: {:?}",
+                err
+            );
+            return Err(EngineError::InitializationFailed);
+        };
+
+        Ok(())
+    }
+    // TODO: end of temporary code
 }
 
 pub(crate) static mut GLOBAL_RENDERER: Lazy<Mutex<RendererFrontend>> = Lazy::new(Mutex::default);
@@ -334,3 +456,15 @@ pub fn renderer_get_main_camera() -> Result<Camera, EngineError> {
     let front_end = fetch_global_renderer(EngineError::UpdateFailed)?;
     Ok(front_end.main_camera.unwrap())
 }
+
+pub fn renderer_get_default_texture() -> Result<&'static dyn Texture, EngineError> {
+    let front_end = fetch_global_renderer(EngineError::UpdateFailed)?;
+    Ok(front_end.default_texture.as_ref().unwrap().as_ref())
+}
+
+// TODO: temporary code
+pub fn renderer_swap_default_texture() -> Result<(), EngineError> {
+    let front_end = fetch_global_renderer(EngineError::UpdateFailed)?;
+    front_end.swap_default_texture()
+}
+// TODO: end of temporary code
